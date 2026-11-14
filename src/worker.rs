@@ -341,7 +341,13 @@ fn execute(conn: &mut Secure, dir: &Path, command: &[String], st: &Status) -> Re
     loop {
         // Le signe de vie sert aussi à détecter un Ctrl-C côté origine : l'envoi échoue, on arrête tout.
         let sent = match rx.recv_timeout(Duration::from_millis(250)) {
-            Ok((err, data)) => conn.send(&Msg::Output { err, data }),
+            Ok((err, data)) => {
+                // Tant que de la sortie arrive, on ne coupe pas : le délai repart.
+                if let Some((_, at)) = &mut exited {
+                    *at = Instant::now();
+                }
+                conn.send(&Msg::Output { err, data })
+            }
             Err(mpsc::RecvTimeoutError::Timeout) => conn.keepalive(),
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         };
@@ -350,7 +356,7 @@ fn execute(conn: &mut Secure, dir: &Path, command: &[String], st: &Status) -> Re
             return Err(e).context("origine déconnectée, commande arrêtée");
         }
         // La tâche est finie quand la commande est finie, même si un processus d'arrière-plan
-        // qu'elle a lancé garde sa sortie ouverte : on laisse un court délai pour les derniers octets.
+        // qu'elle a lancé garde sa sortie ouverte : on s'arrête après 600 ms sans nouvelle sortie.
         if exited.is_none() {
             if let Some(status) = child.try_wait()? {
                 exited = Some((status, Instant::now()));

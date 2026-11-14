@@ -42,3 +42,11 @@
 Contrôles 3a après corrections : build et clippy (`-D warnings`) sur 4 cibles, 7 tests (dont sécurité du tableau de bord), actionlint, shellcheck : verts. Mise à jour testée (réussite, refus d'un programme cassé). Délégation testée avec carte graphique simulée à 92 %.
 
 Restent ouverts (MINEUR) : `bincode` non maintenu ; rotation du journal launchd ; shell `fish` (repli sur zsh/sh) ; noms de fichiers avec `:` refusés.
+
+## Tour 2 : verdict du correcteur (contexte neuf, GRAVE uniquement)
+
+**VALIDÉ : aucune erreur grave.** Tests et clippy reproduits ; client tué en pleine tâche, deux tâches simultanées et transferts (1 Mio pile, 3 Mio, fichier vide, bit exécutable) vérifiés. Code propre à macOS relu sans être exécuté.
+
+Écarts non graves relevés : sortie volumineuse tronquée 600 ms après la fin (corrigé : le délai repart tant que de la sortie arrive) ; phrase du README sur `--pull` (corrigée) ; seuil mémoire peu sensible sur Mac (la mémoire « disponible » y inclut la mémoire active), veille de la machine distante en cours de tâche, commande absente à distance (ouverts, MINEUR).
+
+Boucle arrêtée après 2 tours. Reste à vérifier sur un vrai Mac : mesure de la carte graphique, accès au réseau local, démarrage du service, Gatekeeper.

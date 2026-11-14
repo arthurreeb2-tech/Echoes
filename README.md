@@ -96,7 +96,7 @@ Publier une version : augmenter `version` dans `Cargo.toml` sur `main`. Le workf
 ## Ce qui est synchronisé
 
 - **Aller** : tout le dépôt git qui contient le dossier courant (ou le dossier courant hors dépôt), sauf `.git` et ce qu'excluent `.gitignore` et `.echoesignore`. Seuls les fichiers modifiés depuis la dernière fois sont envoyés. La commande tourne dans le même sous-dossier qu'ici.
-- **Retour** : les fichiers suivis que la commande a modifiés ou créés, plus les chemins donnés à `--pull`. Un fichier modifié ici pendant l'exécution n'est jamais écrasé.
+- **Retour** : les fichiers suivis que la commande a modifiés ou créés, plus les chemins donnés à `--pull`. Un fichier suivi modifié ici pendant l'exécution n'est jamais écrasé ; les chemins donnés à `--pull`, eux, sont toujours remplacés par la version distante.
 - Les caches de build ignorés par git (`target/`, `node_modules/`…) restent sur la machine distante : les builds suivants sont incrémentaux.
 - Garde-fous : jamais le dossier personnel entier, ni plus de 50 000 fichiers ou 4 Go.
 
