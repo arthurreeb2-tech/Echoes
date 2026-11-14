@@ -34,13 +34,23 @@ fn bench() -> f64 {
     v
 }
 
+/// Nom affiché : celui du fichier `name` de la configuration s'il existe, sinon le nom réseau.
+pub fn host_name() -> String {
+    if let Some(n) = config::config_dir().ok().and_then(|d| std::fs::read_to_string(d.join("name")).ok()) {
+        if !n.trim().is_empty() {
+            return n.trim().chars().take(40).collect();
+        }
+    }
+    System::host_name().unwrap_or_else(|_| "machine".into()).trim_end_matches(".local").to_string()
+}
+
 fn fixed() -> Result<Status> {
     let mut sys = System::new()?;
     sys.refresh_memory();
     sys.refresh_cpu_usage();
     Ok(Status {
         id: config::machine_id()?,
-        name: System::host_name().unwrap_or_else(|_| "machine".into()).trim_end_matches(".local").to_string(),
+        name: host_name(),
         os: std::env::consts::OS.into(),
         arch: std::env::consts::ARCH.into(),
         cores: sys.cpus().len().max(1) as u32,

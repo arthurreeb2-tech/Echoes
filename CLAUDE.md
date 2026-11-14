@@ -15,7 +15,8 @@ Installer Echoes sur la machine où tourne cette session, sans poser de question
    - `~/.local/bin/echoes ls` liste la machine (et les autres déjà installées) ;
    - macOS : `launchctl print gui/$(id -u)/io.echoes.serve | grep state` doit indiquer `running` ; journal dans `~/Library/Logs/echoes.log` ;
    - Linux : `systemctl --user status echoes`.
-5. **Rendre compte** en quelques lignes : installé ou non, le code d'appairage s'il vient d'être créé (secret, à garder pour les autres machines), et les éventuelles validations à faire à la main (pare-feu, accès au réseau local).
+5. **Ouvrir le tableau de bord** si l'utilisateur est devant la machine : `~/.local/bin/echoes dashboard`.
+6. **Rendre compte** en quelques lignes : installé ou non, le code d'appairage s'il vient d'être créé (secret, à garder pour les autres machines), et les éventuelles validations à faire à la main (pare-feu, accès au réseau local).
 
 Windows : `irm https://raw.githubusercontent.com/arthurreeb2-tech/Echoes/main/install.ps1 | iex` (variable `ECHOES_CODE` pour le code). Ne jamais l'installer sur un poste professionnel sans l'accord de l'utilisateur, qui doit avoir validé ce point avec son service informatique.
 
@@ -48,4 +49,6 @@ Ne jamais affaiblir la sécurité : clé d'appairage, chiffrement Noise, refus d
 - `src/proto.rs` : messages et canal chiffré. `src/sync.rs` : inventaire et transfert de fichiers.
 - `src/install.rs` : installation (launchd, systemd, tâche planifiée Windows), PATH, consigne globale Claude Code.
 - `src/update.rs` : mise à jour depuis les versions GitHub.
+- `src/history.rs` : journal des tâches. `src/dashboard.rs` + `src/dashboard.html` : tableau de bord local (127.0.0.1:47601, jeton dans l'adresse après `#`, contrôle de l'en-tête Host).
+- `packaging/macos/` : app `Echoes.app` (sans icône dans le Dock) et installateur `.pkg`. Sous Windows, l'installateur est le programme lui-même : lancé sans argument, il s'installe puis ouvre le tableau de bord.
 - `tests/e2e.rs` : deux « machines » sur la même, de bout en bout.

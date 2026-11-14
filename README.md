@@ -10,7 +10,18 @@ Echoes mesure la puissance libre de chaque machine appairée (vitesse d'un cœur
 
 ## Installation
 
-Avec Claude Code, ouvre ce dépôt et dis « installe » (voir `CLAUDE.md`). Sinon :
+**En double-clic**, depuis la page [Releases](https://github.com/arthurreeb2-tech/Echoes/releases/latest) :
+
+- **Mac** (Intel et Apple Silicon) : `Echoes-macOS.pkg`. Ouvre-le et suis l'installateur. Le tableau de bord s'ouvre à la fin. Ensuite, l'app « Echoes » (Spotlight, Launchpad) le rouvre ; elle n'a pas d'icône dans le Dock.
+- **Windows** : `Echoes-Setup-Windows.exe`. Double-clic, puis le tableau de bord s'ouvre ; un raccourci « Echoes » est ajouté au menu Démarrer.
+
+Pour relier une machine aux autres, colle le code d'appairage dans le tableau de bord (rubrique « Appairage »), ou passe-le en ligne de commande.
+
+Ces installateurs ne sont pas encore signés par Apple ni par Microsoft. Au premier lancement, macOS refuse d'ouvrir le `.pkg` : va dans Réglages Système > Confidentialité et sécurité > « Ouvrir quand même ». Windows affiche « Windows a protégé votre ordinateur » : « Informations complémentaires » > « Exécuter quand même ».
+
+**Avec Claude Code** : ouvre ce dépôt et dis « installe » (voir `CLAUDE.md`).
+
+**En ligne de commande** :
 
 | Système | Première machine | Machines suivantes |
 |---|---|---|
@@ -25,7 +36,23 @@ L'installation :
 - ajoute à `~/.claude/CLAUDE.md` une consigne pour que Claude Code passe ses builds et ses tests par `echoes run --` ;
 - affiche le code d'appairage sur la première machine (`echoes pair` le réaffiche).
 
-`echoes uninstall` retire le tout (la clé d'appairage est conservée).
+`echoes uninstall` retire le tout (la clé d'appairage est conservée ; sur Mac, supprime aussi `/Applications/Echoes.app` à la main).
+
+## Tableau de bord
+
+Echoes ne montre rien tant qu'on ne le demande pas. `echoes dashboard`, l'app « Echoes » sur Mac ou le raccourci du menu Démarrer ouvrent une page locale qui affiche :
+
+- les tâches déléguées, le temps gagné (estimé), le calcul fait ailleurs et les données envoyées, sur 24 h, 7 jours, 30 jours ou depuis le début ;
+- les machines du réseau, leur charge en direct, leur puissance et leur version (celles hors ligne restent affichées, grisées) ;
+- la part du travail faite par chaque machine ;
+- chaque tâche : commande, projet, trajet (de quelle machine vers laquelle, ou pourquoi elle est restée ici), durée, gain, résultat ;
+- l'appairage : afficher le code du réseau, ou en coller un pour rejoindre un réseau existant.
+
+Le journal de chaque machine est réuni sur la page, quelle que soit la machine qui a lancé la tâche. La page n'est accessible que depuis la machine elle-même (127.0.0.1) et exige un jeton secret contenu dans son adresse.
+
+Le gain est une estimation : durée de la commande sur la machine distante × rapport de puissance disponible entre les deux machines, moins la durée des transferts.
+
+Pour donner un nom lisible à une machine, écris-le dans le fichier `name` du dossier de configuration (`~/Library/Application Support/echoes/name` sur Mac, `~/.config/echoes/name` sous Linux, `%APPDATA%\echoes\name` sous Windows).
 
 ## Utilisation
 
@@ -35,6 +62,7 @@ echoes run -- cargo test                          # choix automatique
 echoes run --remote -- npm run build              # jamais ici
 echoes run --host mac-mini.local -- make          # machine précise
 echoes run --pull target/release -- cargo build --release   # rapatrie aussi un produit de build
+echoes dashboard                                  # tableau de bord
 echoes update                                     # mise à jour immédiate
 ```
 

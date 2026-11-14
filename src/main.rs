@@ -1,6 +1,8 @@
 mod client;
 mod config;
+mod dashboard;
 mod discover;
+mod history;
 mod install;
 mod proto;
 mod status;
@@ -14,8 +16,9 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "echoes", version, about = "Lance une commande ici, elle tourne sur la machine la plus disponible de ton réseau.")]
 struct Cli {
+    /// Sans commande : installe Echoes si besoin, puis ouvre le tableau de bord.
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: Option<Cmd>,
 }
 
 #[derive(Subcommand)]
@@ -24,7 +27,14 @@ enum Cmd {
     Pair { code: Option<String> },
     /// Installe Echoes : service au démarrage, mises à jour automatiques, consigne Claude Code.
     /// Sans code sur la première machine (un code est créé), avec le code sur les suivantes.
-    Install { code: Option<String> },
+    Install {
+        code: Option<String>,
+        /// Ouvrir le tableau de bord une fois l'installation terminée
+        #[arg(long)]
+        open: bool,
+    },
+    /// Ouvre le tableau de bord (tâches déléguées, machines, efficacité)
+    Dashboard,
     /// Retire le service et le programme (la clé d'appairage est conservée)
     Uninstall,
     /// Met Echoes à jour depuis GitHub
@@ -75,7 +85,23 @@ fn main() {
 
 fn real_main() -> Result<i32> {
     update::remember_exe();
-    match Cli::parse().cmd {
+    let Some(cmd) = Cli::parse().cmd else {
+        // Double-clic sur le programme : installation si nécessaire, puis tableau de bord.
+        if install::is_installed() {
+            // Lancé depuis l'app ou l'installateur : on passe la main à la copie installée, tenue à jour.
+            let installed = install::bin_path()?;
+            let me = std::env::current_exe()?;
+            if std::fs::canonicalize(&me).ok() != std::fs::canonicalize(&installed).ok() {
+                let status = std::process::Command::new(installed).arg("dashboard").status()?;
+                return Ok(status.code().unwrap_or(1));
+            }
+            dashboard::open(false)?;
+        } else {
+            install::run(None, true)?;
+        }
+        return Ok(0);
+    };
+    match cmd {
         Cmd::Pair { code: None } => {
             let key = match config::load_key()? {
                 Some(k) => k,
@@ -94,7 +120,8 @@ fn real_main() -> Result<i32> {
             println!("Machine appairée.");
             Ok(0)
         }
-        Cmd::Install { code } => install::run(code).map(|_| 0),
+        Cmd::Install { code, open } => install::run(code, open).map(|_| 0),
+        Cmd::Dashboard => dashboard::open(false).map(|_| 0),
         Cmd::Uninstall => install::uninstall().map(|_| 0),
         Cmd::Update { check } => {
             update::run_cli(check)?;

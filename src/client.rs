@@ -1,6 +1,7 @@
 //! Machine qui lance la commande : choisit où elle tourne et rapatrie le résultat.
 
 use crate::proto::{Entry, Msg, Secure, Status};
+use crate::history::{self, Record};
 use crate::{config, discover, status, sync};
 use std::path::PathBuf;
 use anyhow::{anyhow, bail, Context, Result};
@@ -9,7 +10,7 @@ use std::io::{IsTerminal, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Une machine distante doit être nettement meilleure pour compenser le transfert.
 const REMOTE_ADVANTAGE: f64 = 1.3;
@@ -37,6 +38,17 @@ fn probe(addr: SocketAddr, key: &[u8; 32]) -> Result<Status> {
         Msg::Status(s) => Ok(s),
         Msg::Error(e) => bail!(e),
         _ => bail!("réponse inattendue"),
+    }
+}
+
+pub fn fetch_history(addr: SocketAddr, key: &[u8; 32]) -> Vec<Record> {
+    let Ok(mut conn) = connect(addr, key) else { return vec![] };
+    if conn.send(&Msg::HistoryReq).is_err() {
+        return vec![];
+    }
+    match conn.recv() {
+        Ok(Msg::History(h)) => h,
+        _ => vec![],
     }
 }
 
@@ -96,14 +108,35 @@ pub fn list() -> Result<()> {
     Ok(())
 }
 
-fn run_local(command: &[String]) -> Result<i32> {
+fn run_local(command: &[String], rec: &mut Record, reason: &str) -> Result<i32> {
+    rec.remote = false;
+    rec.reason = reason.into();
+    let start = Instant::now();
     let status = Command::new(&command[0]).args(&command[1..]).status().with_context(|| format!("impossible de lancer `{}`", command[0]))?;
+    rec.command_ms = start.elapsed().as_millis() as u64;
+    rec.est_local_ms = rec.command_ms;
     Ok(status.code().unwrap_or(1))
 }
 
 pub fn run(opts: RunOpts) -> Result<i32> {
+    let start = Instant::now();
+    let cwd = std::env::current_dir()?;
+    let project = project_root(&cwd).file_name().and_then(|n| n.to_str()).unwrap_or("projet").to_string();
+    let me_name = status::host_name();
+    let mut rec = Record::new(&me_name, &config::machine_id()?, &opts.command, &project);
+    let result = choose_and_run(&opts, &mut rec);
+    rec.total_ms = start.elapsed().as_millis() as u64;
+    rec.exit = result.as_ref().ok().copied();
+    if !rec.remote {
+        rec.est_local_ms = rec.total_ms;
+    }
+    history::append(&rec);
+    result
+}
+
+fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     if opts.local {
-        return run_local(&opts.command);
+        return run_local(&opts.command, rec, "exécution locale demandée");
     }
     let key = config::require_key()?;
     let note = |m: &str| {
@@ -131,18 +164,18 @@ pub fn run(opts: RunOpts) -> Result<i32> {
             bail!("aucune machine disponible sur le réseau");
         }
         note("aucune autre machine disponible, exécution ici");
-        return run_local(&opts.command);
+        return run_local(&opts.command, rec, "aucune autre machine disponible");
     };
     if !forced && target.score() < me.score() * REMOTE_ADVANTAGE {
         note(&format!("cette machine est la plus disponible (score {:.0} contre {:.0} pour {}), exécution ici", me.score(), target.score(), target.name));
-        return run_local(&opts.command);
+        return run_local(&opts.command, rec, &format!("plus disponible ici que {}", target.name));
     }
-    match remote(addr, &target, &key, &opts, &me, &note)? {
+    match remote(addr, &target, &key, opts, &me, &note, rec)? {
         Some(code) => Ok(code),
         None if forced => bail!("{} n'accepte pas de tâche pour l'instant", target.name),
         None => {
             note(&format!("{} indisponible pour l'instant, exécution ici", target.name));
-            run_local(&opts.command)
+            run_local(&opts.command, rec, &format!("{} indisponible", target.name))
         }
     }
 }
@@ -185,7 +218,7 @@ fn too_big(root: &Path, manifest: &[Entry]) -> Option<String> {
 }
 
 /// `Ok(None)` : la machine a refusé la tâche avant de la commencer (on peut la faire ici à la place).
-fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me: &Status, note: &impl Fn(&str)) -> Result<Option<i32>> {
+fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me: &Status, note: &impl Fn(&str), rec: &mut Record) -> Result<Option<i32>> {
     let cwd = std::env::current_dir()?;
     let root = project_root(&cwd);
     let project = blake3::hash(format!("{}:{}", me.id, root.display()).as_bytes()).to_hex()[..12].to_string();
@@ -197,7 +230,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
             bail!("{reason}");
         }
         note(&format!("{reason}, exécution ici"));
-        return run_local(&opts.command).map(Some);
+        return run_local(&opts.command, rec, &reason).map(Some);
     }
     let rel_cwd = sync::rel(&root, &cwd).unwrap_or_default();
     let pull = opts.pull.iter().map(|p| pull_path(&root, &cwd, p)).collect::<Result<Vec<_>>>()?;
@@ -215,18 +248,28 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
         }
         _ => bail!("réponse inattendue"),
     };
+    rec.remote = true;
+    rec.target = target.name.clone();
     note(&format!("→ {} ({}/{}, {:.1} cœurs libres), {} fichier(s) à envoyer sur {}", target.name, target.os, target.arch, target.free, need.len(), manifest.len()));
     for path in &need {
         let entry = by_path.get(path.as_str()).ok_or_else(|| anyhow!("fichier inconnu demandé : {path}"))?;
         sync::send_file(&mut conn, &root, entry, false)?;
+        rec.files_sent += 1;
+        rec.sent_bytes += entry.size;
     }
     conn.send(&Msg::FilesDone)?;
     conn.stream().set_read_timeout(Some(Duration::from_secs(30)))?;
+    let started = Instant::now();
+    let mut finished: Option<Instant> = None;
 
     let mut receiver = sync::Receiver::new();
     let (mut updated, mut skipped) = (0usize, Vec::new());
     loop {
-        match conn.recv().with_context(|| format!("connexion perdue avec {}", target.name))? {
+        let msg = conn.recv().with_context(|| format!("connexion perdue avec {}", target.name))?;
+        if finished.is_none() && matches!(msg, Msg::File { .. } | Msg::FilesDone | Msg::Exit(_)) {
+            finished = Some(Instant::now());
+        }
+        match msg {
             Msg::Output { err: false, data } => {
                 let mut out = std::io::stdout().lock();
                 out.write_all(&data)?;
@@ -249,6 +292,11 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
                 }
             }
             Msg::Exit(code) => {
+                rec.files_back = updated as u32;
+                rec.command_ms = finished.unwrap_or_else(Instant::now).duration_since(started).as_millis() as u64;
+                // Estimation : la même commande ici, au prorata de la puissance disponible de part et d'autre.
+                let ratio = (target.score() / me.score().max(1.0)).clamp(0.25, 8.0);
+                rec.est_local_ms = (rec.command_ms as f64 * ratio) as u64;
                 if updated > 0 {
                     note(&format!("← {updated} fichier(s) rapatrié(s)"));
                 }

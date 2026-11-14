@@ -31,7 +31,11 @@ fn quiet(cmd: &mut Command) -> bool {
     cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().map(|s| s.success()).unwrap_or(false)
 }
 
-pub fn run(code: Option<String>) -> Result<()> {
+pub fn is_installed() -> bool {
+    bin_path().map(|p| p.exists()).unwrap_or(false) && config::load_key().ok().flatten().is_some()
+}
+
+pub fn run(code: Option<String>, open: bool) -> Result<()> {
     // 1. Clé d'appairage.
     let new_code = match (code, config::load_key()?) {
         (Some(c), _) => {
@@ -81,6 +85,10 @@ pub fn run(code: Option<String>) -> Result<()> {
     if let Some(code) = new_code {
         println!("\nPremière machine : sur chacune des autres, installe Echoes avec ce code :\n\n  {code}\n");
         println!("Ce code donne le droit d'exécuter des commandes sur tes machines : ne le partage avec personne.");
+    }
+    println!("Tableau de bord : `echoes dashboard`.");
+    if open && active {
+        crate::dashboard::open(true)?;
     }
     Ok(())
 }
@@ -252,6 +260,12 @@ fn start_service(bin: &Path) -> Result<bool> {
         anyhow::bail!("création de la tâche planifiée impossible");
     }
     quiet(Command::new("schtasks").args(["/Run", "/TN", "Echoes"]));
+    // Raccourci « Echoes » dans le menu Démarrer : ouvre le tableau de bord.
+    let ps = format!(
+        "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Programs')+'\\Echoes.lnk'); $s.TargetPath='{}'; $s.Arguments='dashboard'; $s.WindowStyle=7; $s.Description='Tableau de bord Echoes'; $s.Save()",
+        bin.display()
+    );
+    quiet(Command::new("powershell").args(["-NoProfile", "-Command", &ps]));
     Ok(true)
 }
 
@@ -264,6 +278,9 @@ fn stop_service() {
 #[cfg(windows)]
 fn remove_service_files() -> Result<()> {
     let _ = quiet(Command::new("schtasks").args(["/Delete", "/F", "/TN", "Echoes"]));
+    if let Some(start) = dirs::data_dir() {
+        let _ = fs::remove_file(start.join("Microsoft/Windows/Start Menu/Programs/Echoes.lnk"));
+    }
     Ok(())
 }
 

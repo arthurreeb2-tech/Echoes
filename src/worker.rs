@@ -40,6 +40,7 @@ pub fn serve(port: Option<u16>) -> Result<()> {
     };
     let _mdns = discover::advertise(&name, &id, port).map_err(|e| eprintln!("echoes: annonce réseau impossible ({e})")).ok();
     eprintln!("echoes {}: {name} prête sa puissance sur le port {port}", env!("CARGO_PKG_VERSION"));
+    crate::dashboard::spawn_server();
     if update::enabled() {
         std::thread::spawn(auto_update);
     }
@@ -101,6 +102,7 @@ fn handle(stream: TcpStream, key: &[u8; 32], state: Arc<Mutex<Status>>) -> Resul
             let st = state.lock().unwrap().clone();
             conn.send(&Msg::Status(st))
         }
+        Msg::HistoryReq => conn.send(&Msg::History(crate::history::read(300))),
         Msg::Run { project, name, manifest, cwd, command, pull } => {
             ACTIVE.fetch_add(1, Ordering::SeqCst);
             let _busy = Busy;

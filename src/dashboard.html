@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Echoes</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #6f6c66; --line: #e6e3dc;
+  --accent: #2f6f5e; --accent-soft: #e3efe9; --warn: #a2482f; --warn-soft: #f6e5df;
+  --bar: #d9d5cc; --local: #9a958b;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #151614; --panel: #1d1f1c; --ink: #ecebe6; --muted: #9d9a92; --line: #2d302b;
+    --accent: #7cc4ad; --accent-soft: #1f3530; --warn: #e6957c; --warn-soft: #3a2620;
+    --bar: #343731; --local: #77746c;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 30px 0 10px; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.seg button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.tile .k { color: var(--muted); font-size: 12.5px; }
+.tile .v { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.machines { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.m { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.m.off { opacity: .55; }
+.m .top { display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.off .dot { background: var(--local); }
+.m .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.m .meta { color: var(--muted); font-size: 12.5px; margin: 4px 0 10px; }
+.load { height: 6px; background: var(--bar); border-radius: 3px; overflow: hidden; }
+.load i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.m .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.share { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.share .line { display: grid; grid-template-columns: 140px 1fr 90px; gap: 12px; align-items: center; padding: 5px 0; }
+.share .line span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share .track { height: 10px; background: var(--bar); border-radius: 5px; overflow: hidden; }
+.share .track i { display: block; height: 100%; background: var(--accent); }
+.share .track i.loc { background: var(--local); }
+.share .line span:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.table { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td.cmd { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .sub { display: block; color: var(--muted); font-size: 12px; font-family: inherit; }
+.route { white-space: nowrap; }
+.route b { font-weight: 600; }
+.pill { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 8px; }
+.pill.ok { background: var(--accent-soft); color: var(--accent); }
+.pill.ko { background: var(--warn-soft); color: var(--warn); }
+.gain { color: var(--accent); }
+.loss { color: var(--warn); }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+details.pair { margin-top: 30px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+details.pair summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.pair p { color: var(--muted); font-size: 13px; margin: 10px 0; }
+.pair code { font-family: var(--mono); font-size: 12.5px; word-break: break-all; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; display: block; }
+.pair form { display: flex; gap: 8px; flex-wrap: wrap; }
+.pair input { flex: 1; min-width: 220px; font: inherit; font-family: var(--mono); font-size: 12.5px; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+button.act { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.foot { color: var(--muted); font-size: 12px; margin-top: 14px; }
+.err { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+@media (max-width: 760px) {
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .share .line { grid-template-columns: 96px 1fr auto; }
+  .share .line span:last-child { white-space: nowrap; font-size: 12.5px; }
+  .hide-sm { display: none; }
+  thead { display: none; }
+  table, tbody, tr, td { display: block; }
+  tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  tr:last-child { border-bottom: 0; }
+  td { border: 0; padding: 1px 0; }
+  td.num { text-align: left; color: var(--muted); font-size: 12.5px; }
+  td.num::before { content: "Durée "; }
+  td.cmd { margin: 4px 0 2px; }
+  .route { white-space: normal; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Echoes <small id="sub">chargement…</small></h1>
+    <div class="seg" role="group" aria-label="Période">
+      <button data-p="1">24 h</button><button data-p="7">7 jours</button><button data-p="30">30 jours</button><button data-p="0">Tout</button>
+    </div>
+  </header>
+  <div id="error" class="err" hidden></div>
+
+  <section class="tiles" aria-label="Résumé">
+    <div class="tile"><div class="k">Tâches déléguées</div><div class="v" id="t-del">–</div><div class="s" id="t-del-s"></div></div>
+    <div class="tile"><div class="k">Temps gagné (estimé)</div><div class="v" id="t-gain">–</div><div class="s" id="t-gain-s"></div></div>
+    <div class="tile"><div class="k">Calcul fait ailleurs</div><div class="v" id="t-cpu">–</div><div class="s" id="t-cpu-s"></div></div>
+    <div class="tile"><div class="k">Données envoyées</div><div class="v" id="t-data">–</div><div class="s" id="t-data-s"></div></div>
+  </section>
+
+  <h2>Machines du réseau</h2>
+  <section class="machines" id="machines"></section>
+
+  <h2>Qui a fait le travail</h2>
+  <section class="share" id="share"></section>
+
+  <h2>Tâches</h2>
+  <section class="table">
+    <table>
+      <thead><tr><th>Quand</th><th>Commande</th><th>Trajet</th><th class="num">Durée</th><th class="num hide-sm">Gain</th><th class="hide-sm">Résultat</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+
+  <details class="pair">
+    <summary>Appairage</summary>
+    <p>Le code d'appairage relie tes machines entre elles. Garde-le secret : il permet d'exécuter des commandes sur toutes.</p>
+    <button class="act" id="show-code" type="button">Afficher le code de ce réseau</button>
+    <code id="code" hidden></code>
+    <p>Pour rejoindre un réseau existant, colle ici le code affiché sur une autre de tes machines :</p>
+    <form id="join"><input id="join-code" placeholder="64 caractères" autocomplete="off" spellcheck="false"><button class="act" type="submit">Rejoindre</button></form>
+    <p id="join-msg" hidden></p>
+  </details>
+  <p class="foot">Le gain est une estimation : durée de la commande sur la machine distante × rapport de puissance disponible entre les deux machines, transferts déduits. Page locale, visible de cette machine seulement.</p>
+</main>
+<script>
+const token = location.hash.slice(1);
+const $ = id => document.getElementById(id);
+let period = 7, last = null;
+try { period = +(localStorage.getItem("echoes-period") ?? 7); } catch (e) {}
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { "X-Echoes-Token": token, "Content-Type": "application/json" } });
+  if (!r.ok) throw new Error(r.status === 401 ? "Adresse incomplète : ouvre le tableau de bord avec la commande « echoes dashboard »." : "Erreur " + r.status);
+  return r.json();
+}
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function dur(ms) {
+  const s = Math.round(Math.abs(ms) / 1000);
+  if (s < 60) return (ms < 0 ? "−" : "") + (s || "<1") + " s";
+  const m = Math.floor(s / 60), h = Math.floor(m / 60);
+  if (h) return (ms < 0 ? "−" : "") + h + " h " + String(m % 60).padStart(2, "0");
+  return (ms < 0 ? "−" : "") + m + " min " + String(s % 60).padStart(2, "0");
+}
+function bytes(b) {
+  const u = ["o", "Ko", "Mo", "Go"]; let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return (i ? b.toLocaleString("fr-FR", { maximumFractionDigits: 1 }) : b) + " " + u[i];
+}
+function when(ts) {
+  const d = new Date(ts * 1000), now = new Date();
+  const t = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return "aujourd'hui " + t;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "hier " + t;
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " " + t;
+}
+function ago(ts) {
+  const s = Date.now() / 1000 - ts;
+  if (s < 3600) return "il y a " + Math.max(1, Math.round(s / 60)) + " min";
+  if (s < 86400) return "il y a " + Math.round(s / 3600) + " h";
+  return "il y a " + Math.round(s / 86400) + " j";
+}
+const score = s => s.bench * Math.max(s.free, 0.25);
+const gainOf = r => r.remote ? r.est_local_ms - r.total_ms : 0;
+
+function render(st) {
+  const since = period ? Date.now() / 1000 - period * 86400 : 0;
+  const tasks = st.history.filter(r => r.ts >= since);
+  const remote = tasks.filter(r => r.remote);
+  const online = st.machines.filter(m => m.online).length;
+  $("sub").textContent = `${online} machine${online > 1 ? "s" : ""} en ligne · v${st.version}`;
+
+  $("t-del").textContent = remote.length;
+  $("t-del-s").textContent = tasks.length ? `sur ${tasks.length} tâche${tasks.length > 1 ? "s" : ""} (${Math.round(100 * remote.length / tasks.length)} %)` : "aucune tâche";
+  const gain = remote.reduce((a, r) => a + gainOf(r), 0);
+  $("t-gain").textContent = remote.length ? dur(gain) : "–";
+  $("t-gain").className = "v " + (gain >= 0 ? "" : "loss");
+  $("t-gain-s").textContent = remote.length ? `≈ ${dur(remote.reduce((a, r) => a + r.est_local_ms, 0))} ici, ${dur(remote.reduce((a, r) => a + r.total_ms, 0))} en vrai` : "";
+  const cpu = remote.reduce((a, r) => a + r.command_ms, 0);
+  $("t-cpu").textContent = remote.length ? dur(cpu) : "–";
+  $("t-cpu-s").textContent = remote.length ? "de commandes exécutées à distance" : "";
+  $("t-data").textContent = remote.length ? bytes(remote.reduce((a, r) => a + r.sent_bytes, 0)) : "–";
+  $("t-data-s").textContent = remote.length ? `${remote.reduce((a, r) => a + r.files_sent, 0)} fichiers à l'aller, ${remote.reduce((a, r) => a + r.files_back, 0)} au retour` : "";
+
+  $("machines").innerHTML = st.machines.map(m => {
+    const s = m.status, used = Math.max(0, Math.min(1, 1 - s.free / s.cores));
+    const tag = m.me ? "cette machine" : (m.online ? "en ligne" : ago(m.last_seen));
+    return `<article class="m ${m.online ? "" : "off"}">
+      <div class="top"><span class="dot"></span><span class="name">${esc(s.name)}</span><span class="tag">${esc(tag)}</span></div>
+      <div class="meta">${esc(s.os === "macos" ? "macOS" : s.os)} · ${esc(s.arch)} · ${s.cores} cœurs · ${Math.round(s.mem_gb)} Go · v${esc(s.version)}</div>
+      <div class="load" title="Charge actuelle"><i style="width:${(used * 100).toFixed(0)}%"></i></div>
+      <div class="row"><span>${m.online ? Math.round(used * 100) + " % occupé" : "hors ligne"}</span><span>puissance ${Math.round(score(s))}</span></div>
+    </article>`;
+  }).join("");
+
+  const byTarget = {};
+  for (const r of tasks) {
+    const k = r.target, e = byTarget[k] ??= { ms: 0, n: 0, local: 0 };
+    e.ms += r.command_ms; e.n++; if (!r.remote) e.local++;
+  }
+  const entries = Object.entries(byTarget).sort((a, b) => b[1].ms - a[1].ms);
+  const max = Math.max(1, ...entries.map(e => e[1].ms));
+  $("share").innerHTML = entries.length ? entries.map(([name, e]) => `<div class="line">
+      <span title="${esc(name)}">${esc(name)}</span>
+      <div class="track"><i class="${e.local === e.n ? "loc" : ""}" style="width:${(100 * e.ms / max).toFixed(1)}%"></i></div>
+      <span>${dur(e.ms)} · ${e.n}</span></div>`).join("") : `<div class="empty">Aucune tâche sur cette période.</div>`;
+
+  $("rows").innerHTML = tasks.length ? tasks.slice(0, 200).map(r => {
+    const g = gainOf(r);
+    const route = r.remote ? `${esc(r.origin)} → <b>${esc(r.target)}</b>` : `<b>${esc(r.origin)}</b> <span class="sub">${esc(r.reason || "ici")}</span>`;
+    const res = r.exit === 0 ? `<span class="pill ok">réussi</span>` : `<span class="pill ko">${r.exit == null ? "erreur" : "code " + r.exit}</span>`;
+    return `<tr><td>${when(r.ts)}<span class="sub">${esc(r.project)}</span></td>
+      <td class="cmd">${esc(r.command)}</td><td class="route">${route}</td>
+      <td class="num">${dur(r.total_ms)}</td>
+      <td class="num hide-sm ${g > 0 ? "gain" : g < 0 ? "loss" : ""}">${r.remote ? (g >= 0 ? "+" : "") + dur(g) : "–"}</td>
+      <td class="hide-sm">${res}</td></tr>`;
+  }).join("") : `<tr><td colspan="6" class="empty">Aucune tâche sur cette période. Lance une commande avec « echoes run -- … ».</td></tr>`;
+}
+
+async function refresh() {
+  try {
+    last = await api("/api/state");
+    $("error").hidden = true;
+    render(last);
+  } catch (e) {
+    $("error").textContent = e.message; $("error").hidden = false;
+  }
+}
+
+for (const b of document.querySelectorAll(".seg button")) {
+  b.setAttribute("aria-pressed", String(+b.dataset.p === period));
+  b.onclick = () => {
+    period = +b.dataset.p;
+    try { localStorage.setItem("echoes-period", period); } catch (e) {}
+    for (const o of document.querySelectorAll(".seg button")) o.setAttribute("aria-pressed", String(o === b));
+    if (last) render(last);
+  };
+}
+$("show-code").onclick = async () => {
+  const c = $("code");
+  if (!c.hidden) { c.hidden = true; return; }
+  c.textContent = (await api("/api/code")).code || "aucun code";
+  c.hidden = false;
+};
+$("join").onsubmit = async ev => {
+  ev.preventDefault();
+  const msg = $("join-msg");
+  const r = await api("/api/pair", { method: "POST", body: JSON.stringify({ code: $("join-code").value }) });
+  msg.hidden = false;
+  msg.textContent = r.ok ? "Machine reliée au réseau. Le service redémarre…" : r.error;
+  if (r.ok) { $("join-code").value = ""; setTimeout(refresh, 2500); }
+};
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 5000);
+</script>
+</body>
+</html>

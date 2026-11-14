@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 pub const DEFAULT_PORT: u16 = 47600;
 pub const SERVICE: &str = "_echoes._tcp.local.";
 
@@ -59,6 +59,8 @@ pub enum Msg {
     Ping,
     Exit(i32),
     Error(String),
+    HistoryReq,
+    History(Vec<crate::history::Record>),
 }
 
 pub struct Secure {

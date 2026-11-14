@@ -57,15 +57,35 @@ jobs:
           name: ${{ matrix.target }}
           path: dist/*
 
-  release:
+  macos-pkg:
     needs: [version, build]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: bins
+          merge-multiple: true
+      - run: >
+          packaging/macos/build-pkg.sh "${{ needs.version.outputs.version }}"
+          bins/echoes-aarch64-apple-darwin bins/echoes-x86_64-apple-darwin Echoes-macOS.pkg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-pkg
+          path: Echoes-macOS.pkg
+
+  release:
+    needs: [version, build, macos-pkg]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - run: echo "v${{ needs.version.outputs.version }}" > dist/version.txt
+      - name: Fichiers de la version
+        run: |
+          echo "v${{ needs.version.outputs.version }}" > dist/version.txt
+          cp dist/echoes-x86_64-pc-windows-msvc.exe dist/Echoes-Setup-Windows.exe
       - env:
           GH_TOKEN: ${{ github.token }}
         run: >

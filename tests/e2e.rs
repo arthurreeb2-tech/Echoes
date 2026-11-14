@@ -62,6 +62,10 @@ fn run_on_another_machine() {
     // --pull est relatif au dossier courant : `../build` depuis `sub`.
     assert!(proj.join("build/out").exists(), "stderr: {stderr}");
 
+    // La tâche figure dans le journal du tableau de bord, avec sa destination.
+    let log = fs::read_to_string(b.join("echoes/history.jsonl")).unwrap();
+    assert!(log.contains("\"remote\":true") && log.contains("\"exit\":7"), "{log}");
+
     // Mauvais code d'appairage : refus net.
     let c = tmp("c");
     echoes(&c, &c, &["pair"]);
