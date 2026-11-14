@@ -1,0 +1,27 @@
+[package]
+name = "echoes"
+version = "0.1.0"
+edition = "2021"
+description = "Lance une commande ici, elle tourne sur la machine la plus disponible de ton réseau."
+
+[dependencies]
+anyhow = "1"
+bincode = "1"
+blake3 = "1"
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+hex = "0.4"
+ignore = "0.4"
+mdns-sd = "0.21"
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+snow = "0.10"
+sysinfo = { version = "0.40", default-features = false, features = ["system"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
