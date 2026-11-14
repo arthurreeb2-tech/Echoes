@@ -40,15 +40,16 @@ Chaque version publiée est installée automatiquement sur toutes les machines :
 7. Ouvrir une pull request qui résume les changements et leur raison. La publication part toute seule quand la PR est fusionnée sur `main` (`.github/workflows/release.yml`).
 8. S'il n'y a rien à faire, ne rien ouvrir et le dire.
 
-Ne jamais affaiblir la sécurité : clé d'appairage, chiffrement Noise, refus des chemins qui sortent du dossier de travail (`sync::resolve`), vérification SHA-256 des mises à jour.
+Ne jamais affaiblir la sécurité : clé d'appairage, chiffrement Noise, refus des chemins qui sortent du dossier de travail, de `.git` et des liens symboliques (`sync::safe_dest`), plafonds de connexions, billets du tableau de bord, vérification SHA-256 et essai de démarrage des mises à jour.
 
 ## Repères dans le code
 
-- `src/client.rs` : choix de la machine, envoi du projet, sortie en direct, rapatriement, repli local.
-- `src/worker.rs` : service `echoes serve`, exécution à priorité basse, mise à jour automatique quand aucune tâche ne tourne.
+- `src/client.rs` : choix de la machine (de la plus disponible à la moins disponible), envoi du projet, sortie en direct, rapatriement, repli local.
+- `src/worker.rs` : service `echoes serve`, admission selon la charge, exécution bridée quand la machine est occupée, une tâche à la fois par projet, mise à jour automatique quand aucune tâche ne tourne.
+- `src/status.rs` : mesures (cœurs libres, carte graphique, mémoire). La formule de puissance disponible est dans `Status::score` (`src/proto.rs`) ; `ECHOES_FAKE_GPU=<0-100>` simule une carte graphique occupée pour les tests.
 - `src/proto.rs` : messages et canal chiffré. `src/sync.rs` : inventaire et transfert de fichiers.
 - `src/install.rs` : installation (launchd, systemd, tâche planifiée Windows), PATH, consigne globale Claude Code.
 - `src/update.rs` : mise à jour depuis les versions GitHub.
-- `src/history.rs` : journal des tâches. `src/dashboard.rs` + `src/dashboard.html` : tableau de bord local (127.0.0.1:47601, jeton dans l'adresse après `#`, contrôle de l'en-tête Host).
+- `src/history.rs` : journal des tâches. `src/dashboard.rs` + `src/dashboard.html` : tableau de bord local (127.0.0.1:47601, billet à usage unique après `#` échangé contre une session, preuve d'identité du serveur, contrôle de l'en-tête Host).
 - `packaging/macos/` : app `Echoes.app` (sans icône dans le Dock) dans une image disque `.dmg` à glisser dans Applications ; au premier lancement, l'app s'installe et ouvre le tableau de bord. `docs/index.html` : page de téléchargement (GitHub Pages, `.github/workflows/pages.yml`). Sous Windows, l'installateur est le programme lui-même : lancé sans argument, il s'installe puis ouvre le tableau de bord.
 - `tests/e2e.rs` : deux « machines » sur la même, de bout en bout.

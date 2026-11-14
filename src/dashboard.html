@@ -50,12 +50,10 @@ summary::-webkit-details-marker { display: none; }
 .tile .v { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile .s { color: var(--muted); font-size: 12px; }
 .machines { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-.m { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 4px 20px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.m { padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .m:last-child { border-bottom: 0; }
-.m .top, .m .meta { grid-column: 1; }
-.m .load, .m .row { grid-column: 2; }
-.m .load { grid-row: 1; align-self: end; }
-.m .row { grid-row: 2; margin-top: 0; }
+.m .load { margin-top: 6px; }
+.tag.warn { color: var(--warn); border-color: var(--warn); }
 .m.off .name, .m.off .meta, .m.off .row { color: var(--muted); }
 .m .top { display: flex; align-items: center; gap: 8px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
@@ -104,9 +102,7 @@ button.act { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 6
 .err { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
 @media (max-width: 760px) {
   .tiles { grid-template-columns: 1fr; gap: 10px; }
-  .m { display: block; }
-  .m .meta { margin: 2px 0 8px; }
-  .m .row { margin-top: 6px; }
+  .m .row { flex-direction: column; gap: 2px; }
   .share .line { grid-template-columns: 96px 1fr auto; }
   .share .line span:last-child { white-space: nowrap; font-size: 12px; }
   .hide-sm { display: none; }
@@ -175,16 +171,33 @@ button.act { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 6
   <p class="foot">Page locale, visible de cette machine seulement.</p>
 </main>
 <script>
-const token = location.hash.slice(1);
 const $ = id => document.getElementById(id);
-let period = 7, last = null, pairOpened = false;
-try { period = +(localStorage.getItem("echoes-period") ?? 7); } catch (e) {}
+let period = 7, last = null, pairOpened = false, token = null, busy = false;
+try { const p = +localStorage.getItem("echoes-period"); if ([0, 1, 7, 30].includes(p) && localStorage.getItem("echoes-period") !== null) period = p; } catch (e) {}
+try { token = sessionStorage.getItem("echoes-session"); } catch (e) {}
+const EXPIRED = "Session expirée : rouvre le tableau de bord depuis l'app Echoes ou avec la commande « echoes dashboard ».";
+
+// Le billet d'entrée (après « # ») ne sert qu'une fois : on l'échange contre une session,
+// puis on l'efface de l'adresse pour qu'il ne reste pas dans l'historique.
+async function login() {
+  const ticket = location.hash.slice(1);
+  if (!ticket) return;
+  history.replaceState(null, "", location.pathname);
+  const r = await fetch("/api/session", { method: "POST", body: JSON.stringify({ ticket }) });
+  if (r.ok) {
+    token = (await r.json()).token;
+    try { sessionStorage.setItem("echoes-session", token); } catch (e) {}
+  }
+}
 
 async function api(path, opts = {}) {
+  if (!token) throw new Error(EXPIRED);
   const r = await fetch(path, { ...opts, headers: { "X-Echoes-Token": token, "Content-Type": "application/json" } });
-  if (!r.ok) throw new Error(r.status === 401 ? "Adresse incomplète : ouvre le tableau de bord avec la commande « echoes dashboard »." : "Erreur " + r.status);
+  if (r.status === 401) throw new Error(EXPIRED);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Erreur " + r.status);
   return r.json();
 }
+function fail(e) { $("error").textContent = e.message; $("error").hidden = false; }
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function dur(ms) {
@@ -213,8 +226,8 @@ function ago(ts) {
   if (s < 86400) return "il y a " + Math.round(s / 3600) + " h";
   return "il y a " + Math.round(s / 86400) + " j";
 }
-const score = s => s.bench * Math.max(s.free, 0.25);
-const gainOf = r => r.remote ? r.est_local_ms - r.total_ms : 0;
+// Une tâche déléguée qui a échoué en route n'a pas d'estimation : elle ne compte pas dans le gain.
+const gainOf = r => r.remote && r.est_local_ms > 0 ? r.est_local_ms - r.total_ms : 0;
 
 function render(st) {
   const since = period ? Date.now() / 1000 - period * 86400 : 0;
@@ -236,13 +249,18 @@ function render(st) {
   $("t-data-s").textContent = remote.length ? `${remote.reduce((a, r) => a + r.files_sent, 0)} fichiers à l'aller, ${remote.reduce((a, r) => a + r.files_back, 0)} au retour` : "";
 
   $("machines").innerHTML = st.machines.map(m => {
-    const s = m.status, used = Math.max(0, Math.min(1, 1 - s.free / s.cores));
+    const s = m.status, used = Math.max(0, Math.min(1, 1 - s.free / Math.max(1, s.cores)));
     const tag = m.me ? "cette machine" : (m.online ? "en ligne" : ago(m.last_seen));
+    const gpu = s.gpu == null ? "" : ` · carte graphique ${Math.round(s.gpu)} %`;
+    const jobs = s.jobs ? ` · ${s.jobs} tâche${s.jobs > 1 ? "s" : ""} en cours` : "";
+    const state = !m.online ? "hors ligne"
+      : `processeur ${Math.round(used * 100)} %${gpu} · ${s.mem_free_gb.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} Go libres${jobs}`;
+    const power = !m.online ? "" : m.busy ? `tâches limitées · puissance ${Math.round(m.score)}` : `puissance ${Math.round(m.score)}`;
     return `<article class="m ${m.online ? "" : "off"}">
-      <div class="top"><span class="dot"></span><span class="name">${esc(s.name)}</span><span class="tag">${esc(tag)}</span></div>
+      <div class="top"><span class="dot"></span><span class="name">${esc(s.name)}</span><span class="tag">${esc(tag)}</span>${m.online && m.busy ? `<span class="tag warn">occupée</span>` : ""}</div>
       <div class="meta">${esc(s.os === "macos" ? "macOS" : s.os)} · ${esc(s.arch)} · ${s.cores} cœurs · ${Math.round(s.mem_gb)} Go · v${esc(s.version)}</div>
-      <div class="load" title="Charge actuelle"><i style="width:${(used * 100).toFixed(0)}%"></i></div>
-      <div class="row"><span>${m.online ? Math.round(used * 100) + " % occupé" : "hors ligne"}</span><span>puissance ${Math.round(score(s))}</span></div>
+      <div class="load" title="Charge du processeur"><i style="width:${m.online ? (used * 100).toFixed(0) : 0}%"></i></div>
+      <div class="row"><span>${state}</span><span>${power}</span></div>
     </article>`;
   }).join("");
 
@@ -286,13 +304,14 @@ function render(st) {
 }
 
 async function refresh() {
+  if (busy) return; // une mesure à la fois : pas de réponses qui se croisent
+  busy = true;
   try {
     last = await api("/api/state");
     $("error").hidden = true;
-    render(last);
-  } catch (e) {
-    $("error").textContent = e.message; $("error").hidden = false;
-  }
+    if (!String(getSelection())) render(last); // on ne redessine pas sous une sélection en cours de copie
+  } catch (e) { fail(e); }
+  busy = false;
 }
 
 for (const b of document.querySelectorAll(".seg button")) {
@@ -311,18 +330,23 @@ $("more").onclick = () => {
 $("show-code").onclick = async () => {
   const c = $("code");
   if (!c.hidden) { c.hidden = true; return; }
-  c.textContent = (await api("/api/code")).code || "aucun code";
-  c.hidden = false;
+  try {
+    c.textContent = (await api("/api/code")).code || "aucun code";
+    c.hidden = false;
+  } catch (e) { fail(e); }
 };
 $("join").onsubmit = async ev => {
   ev.preventDefault();
   const msg = $("join-msg");
-  const r = await api("/api/pair", { method: "POST", body: JSON.stringify({ code: $("join-code").value }) });
-  msg.hidden = false;
-  msg.textContent = r.ok ? "Machine reliée au réseau. Le service redémarre…" : r.error;
-  if (r.ok) { $("join-code").value = ""; setTimeout(refresh, 2500); }
+  if (last && last.paired && last.machines.length > 1 && !confirm("Cette machine quittera son réseau actuel pour rejoindre celui de ce code. Continuer ?")) return;
+  try {
+    const r = await api("/api/pair", { method: "POST", body: JSON.stringify({ code: $("join-code").value }) });
+    msg.hidden = false;
+    msg.textContent = r.ok ? "Machine reliée au réseau. Les autres machines apparaîtront dans quelques secondes." : r.error;
+    if (r.ok) { $("join-code").value = ""; setTimeout(refresh, 1500); }
+  } catch (e) { fail(e); }
 };
-refresh();
+login().catch(() => {}).then(refresh);
 setInterval(() => { if (!document.hidden) refresh(); }, 5000);
 </script>
 </body>

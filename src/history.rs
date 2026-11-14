@@ -59,14 +59,25 @@ fn file() -> Option<std::path::PathBuf> {
 pub fn append(rec: &Record) {
     let Some(path) = file() else { return };
     let Ok(line) = serde_json::to_string(rec) else { return };
-    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
+    let mut opts = OpenOptions::new();
+    opts.create(true).append(true);
+    #[cfg(unix)]
+    {
+        // Les commandes peuvent contenir des informations sensibles : journal privé.
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    if let Ok(mut f) = opts.open(&path) {
         let _ = f.write_all(format!("{line}\n").as_bytes());
     }
     // Élagage occasionnel : on garde les KEEP dernières tâches.
     if fs::metadata(&path).map(|m| m.len() > 4 << 20).unwrap_or(false) {
         let all = read(usize::MAX);
         let keep: Vec<String> = all.iter().rev().take(KEEP).rev().filter_map(|r| serde_json::to_string(r).ok()).collect();
-        let _ = fs::write(&path, keep.join("\n") + "\n");
+        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+        if fs::write(&tmp, keep.join("\n") + "\n").is_ok() {
+            let _ = fs::rename(&tmp, &path);
+        }
     }
 }
 

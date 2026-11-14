@@ -44,6 +44,17 @@ jobs:
       - run: cargo test --locked
         if: matrix.target != 'x86_64-apple-darwin'
       - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Le programme démarre
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [[ "$TARGET" == x86_64-apple-darwin ]]; then
+            softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1 || true
+            arch -x86_64 "target/$TARGET/release/echoes" --version
+          else
+            "target/$TARGET/release/echoes" --version
+          fi
       - name: Paquet
         shell: bash
         env:

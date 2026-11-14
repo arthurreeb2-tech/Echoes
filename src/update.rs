@@ -49,6 +49,11 @@ fn fetch(url: &str) -> Result<Vec<u8>> {
     Ok(out.stdout)
 }
 
+/// Vrai si la version `a` est strictement plus récente que `b`.
+pub fn newer(a: &str, b: &str) -> bool {
+    matches!((parse(a), parse(b)), (Some(a), Some(b)) if a > b)
+}
+
 fn parse(v: &str) -> Option<(u64, u64, u64)> {
     let mut it = v.trim().trim_start_matches('v').split('.').map(|p| p.parse::<u64>().ok());
     Some((it.next()??, it.next()??, it.next()??))
@@ -66,7 +71,6 @@ pub fn check() -> Result<Option<Release>> {
 
 /// Télécharge, vérifie l'empreinte SHA-256, puis remplace le programme en place.
 pub fn install(release: &Release) -> Result<()> {
-    let _ = &release.version;
     let url = format!("{}/{}", base(), asset());
     let binary = fetch(&url)?;
     let expected = String::from_utf8(fetch(&format!("{url}.sha256"))?)?;
@@ -81,6 +85,17 @@ pub fn install(release: &Release) -> Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+    }
+    // Essai avant mise en place : un programme qui ne démarre pas ici ne remplace jamais celui qui marche.
+    let trial = Command::new(&tmp).arg("--version").output();
+    let starts = matches!(&trial, Ok(o) if o.status.success() && String::from_utf8_lossy(&o.stdout).contains(&release.version));
+    if !starts {
+        let _ = std::fs::remove_file(&tmp);
+        bail!("la version {} ne démarre pas sur cette machine : mise à jour abandonnée, version actuelle conservée", release.version);
+    }
+    // Copie de secours de la version actuelle (`echoes.prev`, à côté du programme).
+    if let Some(exe) = EXE.get().cloned().or_else(|| std::env::current_exe().ok()) {
+        let _ = std::fs::copy(&exe, exe.with_extension("prev"));
     }
     let result = self_replace::self_replace(&tmp);
     let _ = std::fs::remove_file(&tmp);
@@ -126,5 +141,6 @@ mod tests {
         assert_eq!(super::parse("0.10.0\n"), Some((0, 10, 0)));
         assert!(super::parse("v0.10.0") > super::parse("v0.9.9"));
         assert_eq!(super::parse("latest"), None);
+        assert!(super::newer("0.4.0", "0.3.9") && !super::newer("0.3.0", "0.3.0") && !super::newer("x", "0.1.0"));
     }
 }

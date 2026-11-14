@@ -73,3 +73,52 @@ fn run_on_another_machine() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("refusé"));
 }
+
+fn http(request: &str) -> String {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect("127.0.0.1:47601").unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    s.write_all(request.as_bytes()).unwrap();
+    let mut out = String::new();
+    let _ = s.read_to_string(&mut out);
+    out
+}
+
+fn post(path: &str, token: &str, body: &str) -> String {
+    http(&format!("POST {path} HTTP/1.1\r\nHost: 127.0.0.1:47601\r\nX-Echoes-Token: {token}\r\nContent-Length: {}\r\n\r\n{body}", body.len()))
+}
+
+#[test]
+fn dashboard_requires_a_one_time_ticket() {
+    use std::io::{BufRead, BufReader};
+    let home = tmp("dash");
+    assert!(echoes(&home, &home, &["pair"]).status.success());
+    let mut child = Command::new(BIN)
+        .arg("dashboard")
+        .env("ECHOES_HOME", &home)
+        .env("ECHOES_NO_UPDATE", "1")
+        .env("ECHOES_NO_BROWSER", "1")
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap()).read_line(&mut line).unwrap();
+    let _server = Kill(child);
+    let ticket = line.trim().rsplit('#').next().unwrap().to_string();
+    assert!(ticket.contains('.'), "adresse inattendue : {line}");
+
+    // Sans session : refus. Avec un autre nom d'hôte (DNS rebinding) : refus.
+    assert!(http("GET /api/state HTTP/1.1\r\nHost: 127.0.0.1:47601\r\n\r\n").starts_with("HTTP/1.1 401"));
+    assert!(http("GET / HTTP/1.1\r\nHost: evil.example:47601\r\n\r\n").starts_with("HTTP/1.1 403"));
+    assert!(post("/api/session", "", "{\"ticket\":\"1.aa.bb\"}").starts_with("HTTP/1.1 401"));
+
+    // Le billet ouvre une session, une seule fois.
+    let reply = post("/api/session", "", &format!("{{\"ticket\":\"{ticket}\"}}"));
+    assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+    let token = reply.rsplit("\"token\":\"").next().unwrap().trim_end_matches("\"}").to_string();
+    assert!(post("/api/session", "", &format!("{{\"ticket\":\"{ticket}\"}}")).starts_with("HTTP/1.1 401"));
+
+    let state = http(&format!("GET /api/state HTTP/1.1\r\nHost: 127.0.0.1:47601\r\nX-Echoes-Token: {token}\r\n\r\n"));
+    assert!(state.starts_with("HTTP/1.1 200") && state.contains("\"machines\""), "{state}");
+    assert!(post("/api/pair", &token, "pas du json").starts_with("HTTP/1.1 400"));
+}

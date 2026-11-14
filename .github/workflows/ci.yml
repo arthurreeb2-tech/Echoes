@@ -1,6 +1,7 @@
 name: CI
 on:
   push:
+    branches: [main, "claude/**"]
   pull_request:
 
 jobs:
@@ -13,6 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo build --locked
+      - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
       - name: Image disque macOS (Intel + Apple Silicon)
         if: matrix.os == 'macos-latest'
@@ -22,6 +24,12 @@ jobs:
           cargo build --locked --target aarch64-apple-darwin
           packaging/macos/build-dmg.sh 0.0.0 target/aarch64-apple-darwin/debug/echoes target/x86_64-apple-darwin/debug/echoes Echoes-macOS.dmg
           hdiutil attach -nobrowse -mountpoint /tmp/echoes-dmg Echoes-macOS.dmg
-          lipo -archs /tmp/echoes-dmg/Echoes.app/Contents/MacOS/Echoes | grep -q "x86_64 arm64"
+          app=/tmp/echoes-dmg/Echoes.app
+          lipo "$app/Contents/MacOS/Echoes" -verify_arch x86_64 arm64
+          codesign --verify --deep --strict "$app"
           test -L /tmp/echoes-dmg/Applications
+          # Les deux moitiés du programme doivent démarrer : Apple Silicon, puis Intel via Rosetta.
+          "$app/Contents/MacOS/Echoes" --version
+          softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1 || true
+          arch -x86_64 "$app/Contents/MacOS/Echoes" --version
           hdiutil detach /tmp/echoes-dmg

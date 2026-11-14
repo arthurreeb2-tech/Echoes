@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 pub const DEFAULT_PORT: u16 = 47600;
 pub const SERVICE: &str = "_echoes._tcp.local.";
 
@@ -37,12 +37,60 @@ pub struct Status {
     pub free: f64,
     pub mem_gb: f64,
     pub version: String,
+    /// Occupation de la carte graphique en %, si elle est mesurable.
+    pub gpu: Option<f32>,
+    /// Mémoire encore disponible, en Go.
+    pub mem_free_gb: f64,
+    /// Tâches Echoes en cours sur cette machine.
+    pub jobs: u32,
 }
 
+/// Carte graphique à partir de laquelle la machine est considérée comme prise par un travail lourd.
+pub const GPU_BUSY: f32 = 50.0;
+
 impl Status {
-    /// Puissance disponible maintenant : vitesse d'un cœur × cœurs libres.
+    /// La personne fait tourner quelque chose de lourd (montage, 3D…) ou la mémoire est presque pleine.
+    pub fn busy(&self) -> bool {
+        self.gpu.unwrap_or(0.0) >= GPU_BUSY || self.mem_free_gb < 1.0
+    }
+
+    /// Part de la puissance qu'on s'autorise à prendre : 100 % jusqu'à 30 % de carte graphique,
+    /// puis de moins en moins, jusqu'à 40 % quand elle est saturée.
+    fn gpu_factor(&self) -> f64 {
+        let gpu = self.gpu.unwrap_or(0.0) as f64;
+        (1.0 - (gpu - 30.0).max(0.0) / 60.0 * 0.6).max(0.4)
+    }
+
+    /// Une machine sans mémoire libre ralentit tout le monde : pénalité sous 2 Go disponibles.
+    fn mem_factor(&self) -> f64 {
+        ((self.mem_free_gb - 0.5) / 1.5).clamp(0.2, 1.0)
+    }
+
+    /// Puissance qu'on peut lui demander maintenant sans la saturer :
+    /// vitesse d'un cœur × cœurs libres × réserve laissée à la carte graphique et à la mémoire.
     pub fn score(&self) -> f64 {
-        self.bench * self.free.max(0.25)
+        self.bench * self.free.max(0.25) * self.gpu_factor() * self.mem_factor()
+    }
+
+    /// Nombre de tâches qu'elle accepte en même temps.
+    pub fn max_jobs(&self) -> u32 {
+        if self.busy() {
+            1
+        } else {
+            (self.cores / 4).max(1)
+        }
+    }
+
+    /// Explication courte de l'état, pour les messages et le tableau de bord.
+    pub fn load_note(&self) -> String {
+        let mut parts = vec![format!("{:.1} cœurs libres", self.free)];
+        if let Some(g) = self.gpu {
+            parts.push(format!("carte graphique {g:.0} %"));
+        }
+        if self.mem_free_gb < 2.0 {
+            parts.push(format!("{:.1} Go de mémoire libre", self.mem_free_gb));
+        }
+        parts.join(", ")
     }
 }
 
@@ -66,6 +114,7 @@ pub enum Msg {
 pub struct Secure {
     stream: TcpStream,
     noise: snow::TransportState,
+    last_send: std::time::Instant,
 }
 
 impl Secure {
@@ -77,7 +126,7 @@ impl Secure {
         let refused = || anyhow!("code d'appairage refusé par la machine distante (relance `echoes pair <code>` avec le bon code)");
         let reply = read_frame(&stream).map_err(|_| refused())?;
         hs.read_message(&reply, &mut buf).map_err(|_| refused())?;
-        let mut s = Secure { stream, noise: hs.into_transport_mode()? };
+        let mut s = Secure { stream, noise: hs.into_transport_mode()?, last_send: std::time::Instant::now() };
         s.send(&Msg::Hello { version: VERSION })?;
         Ok(s)
     }
@@ -89,7 +138,7 @@ impl Secure {
         hs.read_message(&first, &mut buf).map_err(|_| anyhow!("clé invalide"))?;
         let n = hs.write_message(&[], &mut buf)?;
         write_frame(&stream, &buf[..n])?;
-        let mut s = Secure { stream, noise: hs.into_transport_mode()? };
+        let mut s = Secure { stream, noise: hs.into_transport_mode()?, last_send: std::time::Instant::now() };
         match s.recv()? {
             Msg::Hello { version } if version == VERSION => Ok(s),
             Msg::Hello { version } => {
@@ -120,6 +169,15 @@ impl Secure {
             out.extend_from_slice(&cipher[..n]);
         }
         (&self.stream).write_all(&out)?;
+        self.last_send = std::time::Instant::now();
+        Ok(())
+    }
+
+    /// À appeler dans les traitements longs : prévient l'autre côté qu'on est toujours là.
+    pub fn keepalive(&mut self) -> Result<()> {
+        if self.last_send.elapsed() >= std::time::Duration::from_secs(2) {
+            self.send(&Msg::Ping)?;
+        }
         Ok(())
     }
 

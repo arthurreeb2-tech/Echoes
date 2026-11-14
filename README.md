@@ -6,7 +6,21 @@ Lance une commande ici, elle tourne sur la machine la plus disponible de ton ré
 echoes run -- cargo build --release
 ```
 
-Echoes mesure la puissance libre de chaque machine appairée (vitesse d'un cœur × cœurs libres), envoie le projet à la meilleure, y lance la commande à priorité basse, affiche sa sortie en direct, puis rapatrie les fichiers modifiés et le code de sortie. Si cette machine-ci est la plus disponible, ou si aucune autre ne répond, la commande tourne simplement ici.
+Echoes mesure ce que chaque machine appairée peut donner maintenant, envoie le projet à la meilleure, y lance la commande à priorité basse, affiche sa sortie en direct, puis rapatrie les fichiers modifiés et le code de sortie. Si cette machine-ci est la plus disponible, ou si aucune autre ne répond, la commande tourne simplement ici.
+
+## Une délégation qui ménage les machines occupées
+
+La machine la plus puissante n'est pas toujours la plus disponible : si elle fait un montage vidéo ou un rendu 3D, lui envoyer un build la ferait ramer. Echoes en tient compte.
+
+- **Ce qui est mesuré**, en continu sur chaque machine : cœurs libres, occupation de la carte graphique, mémoire disponible, tâches Echoes en cours.
+- **Puissance disponible** = vitesse d'un cœur × cœurs libres × réserve. La réserve vaut 100 % jusqu'à 30 % de carte graphique, puis baisse jusqu'à 40 % quand elle est saturée ; elle baisse aussi quand il reste moins de 2 Go de mémoire.
+- **Choix** : la tâche part vers la machine dont la puissance disponible est la plus haute, si elle dépasse d'au moins 30 % celle de la machine qui demande. Une machine puissante mais occupée passe donc derrière une machine modeste mais libre.
+- **Machine occupée** (carte graphique à 50 % ou plus, ou moins de 1 Go de mémoire libre) : elle n'accepte qu'une tâche à la fois, la lance à la priorité la plus basse et sur la moitié de ses cœurs (pour `cargo`, `make` et `cmake`). Les demandes en trop sont refusées et partent vers la machine suivante, ou tournent sur place.
+- **Dans l'autre sens** : une machine occupée qui lance elle-même une tâche voit sa propre puissance disponible baisser, donc elle délègue plus volontiers.
+
+`echoes ls` et le tableau de bord affichent ces mesures et signalent les machines « occupées ».
+
+Limites : Echoes délègue des commandes (calcul sur processeur), il ne déplace pas le travail d'une carte graphique. La carte graphique est mesurée sur Mac (`ioreg`), et sur Windows et Linux avec une carte NVIDIA (`nvidia-smi`) ou AMD sous Linux ; ailleurs seuls le processeur et la mémoire comptent. La mesure sur Mac reste à confirmer sur de vraies machines.
 
 ## Installation
 
@@ -36,6 +50,13 @@ L'installation :
 - ajoute à `~/.claude/CLAUDE.md` une consigne pour que Claude Code passe ses builds et ses tests par `echoes run --` ;
 - affiche le code d'appairage sur la première machine (`echoes pair` le réaffiche).
 
+À savoir sur Mac :
+
+- macOS signale un nouvel « élément d'ouverture » à l'installation : c'est le service d'Echoes. Le désactiver dans Réglages Système > Général > Ouverture arrête Echoes.
+- Le service ne tourne que lorsqu'une session est ouverte. Sur un Mac sans écran (Mac mini), active l'ouverture de session automatique pour qu'il reprenne après un redémarrage.
+- Si macOS demande d'autoriser Echoes à accéder au réseau local ou à recevoir des connexions, accepte : sans cela les machines ne se voient pas.
+- Si macOS dit l'app « endommagée » : `xattr -dr com.apple.quarantine /Applications/Echoes.app`.
+
 `echoes uninstall` retire le tout (la clé d'appairage est conservée ; sur Mac, mets aussi `Echoes.app` à la corbeille).
 
 ## Tableau de bord
@@ -48,7 +69,7 @@ Echoes ne montre rien tant qu'on ne le demande pas. `echoes dashboard`, l'app «
 - chaque tâche : commande, projet, trajet (de quelle machine vers laquelle, ou pourquoi elle est restée ici), durée, gain, résultat ;
 - l'appairage : afficher le code du réseau, ou en coller un pour rejoindre un réseau existant.
 
-Le journal de chaque machine est réuni sur la page, quelle que soit la machine qui a lancé la tâche. La page n'est accessible que depuis la machine elle-même (127.0.0.1) et exige un jeton secret contenu dans son adresse.
+Le journal de chaque machine est réuni sur la page, quelle que soit la machine qui a lancé la tâche. La page n'est accessible que depuis la machine elle-même (127.0.0.1). Chaque ouverture passe par un billet à usage unique, valable une minute, que seul ton compte peut fabriquer ; la session qui en résulte dure 12 heures et ne survit pas à la fermeture de l'onglet.
 
 Le gain est une estimation : durée de la commande sur la machine distante × rapport de puissance disponible entre les deux machines, moins la durée des transferts.
 
@@ -68,7 +89,7 @@ echoes update                                     # mise à jour immédiate
 
 ## Mises à jour automatiques
 
-Le service vérifie toutes les 6 heures s'il existe une version plus récente sur les versions publiées de GitHub, la télécharge, vérifie son empreinte SHA-256 et se relance avec elle, uniquement quand aucune tâche ne tourne. `ECHOES_NO_UPDATE=1` désactive ce mécanisme.
+Le service vérifie toutes les 6 heures s'il existe une version plus récente sur les versions publiées de GitHub, la télécharge, vérifie son empreinte SHA-256, s'assure qu'elle démarre sur cette machine, puis se relance avec elle, uniquement quand aucune tâche ne tourne. La version précédente est gardée à côté du programme (`echoes.prev`). `ECHOES_NO_UPDATE=1` désactive ce mécanisme.
 
 Publier une version : augmenter `version` dans `Cargo.toml` sur `main`. Le workflow `release.yml` compile pour macOS (Apple Silicon et Intel), Linux et Windows et publie la version ; les machines la récupèrent d'elles-mêmes. Cela suppose que le dépôt soit **public**.
 
@@ -81,7 +102,9 @@ Publier une version : augmenter `version` dans `Cargo.toml` sur `main`. Le workf
 
 ## Limites
 
-- Délégation entre machines du **même système** seulement (Mac vers Mac, Windows vers Windows), sauf `--host` explicite.
+- Délégation entre machines du **même système** seulement (Mac vers Mac, Windows vers Windows), sauf `--host` explicite. Entre un Mac Intel et un Mac Apple Silicon, la délégation est permise ; Echoes avertit quand `--pull` rapatrie des fichiers compilés pour l'autre architecture.
+- Une seule tâche à la fois par projet sur une même machine : la suivante attend son tour.
+- Les fichiers rapatriés ne sont jamais écrits dans `.git` ni à travers un lien symbolique.
 - Un binaire compilé à distance a l'architecture de la machine distante : un build fait sur un Mac Apple Silicon ne s'exécute pas tel quel sur un Mac Intel. Sans importance pour les tests, le lint ou la vérification de types.
 - La commande doit exister sur la machine distante (mêmes outils installés).
 - Pas d'entrée clavier ni de terminal interactif pour la commande distante ; liens symboliques et `.git` non transmis.

@@ -88,7 +88,8 @@ fn real_main() -> Result<i32> {
     update::remember_exe();
     let Some(cmd) = Cli::parse().cmd else {
         // Double-clic sur le programme : installation si nécessaire, puis tableau de bord.
-        if install::is_installed() {
+        let outdated = install::installed_version().map(|v| update::newer(env!("CARGO_PKG_VERSION"), &v)).unwrap_or(true);
+        if install::is_installed() && !outdated {
             // Lancé depuis l'app ou l'installateur : on passe la main à la copie installée, tenue à jour.
             let installed = install::bin_path()?;
             let me = std::env::current_exe()?;

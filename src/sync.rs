@@ -30,6 +30,26 @@ pub fn resolve_file(root: &Path, rel: &str) -> Result<PathBuf> {
     resolve(root, rel)
 }
 
+/// Destination d'un fichier reçu de l'autre machine. En plus de `resolve_file`, refuse `.git`
+/// (des scripts y sont exécutés par git) et tout lien symbolique sur le chemin, qui ferait
+/// écrire hors du projet.
+pub fn safe_dest(root: &Path, rel: &str) -> Result<PathBuf> {
+    let dest = resolve_file(root, rel)?;
+    let mut cur = root.to_path_buf();
+    for (i, part) in rel.split('/').filter(|p| !p.is_empty()).enumerate() {
+        if i == 0 && part.eq_ignore_ascii_case(".git") {
+            bail!("écriture refusée dans .git : {rel}");
+        }
+        cur.push(part);
+        if let Ok(meta) = fs::symlink_metadata(&cur) {
+            if meta.file_type().is_symlink() {
+                bail!("écriture refusée à travers un lien symbolique : {rel}");
+            }
+        }
+    }
+    Ok(dest)
+}
+
 pub fn rel(root: &Path, path: &Path) -> Option<String> {
     let parts: Option<Vec<&str>> = path.strip_prefix(root).ok()?.components().map(|c| c.as_os_str().to_str()).collect();
     Some(parts?.join("/"))
@@ -62,6 +82,12 @@ impl HashCache {
                 let _ = fs::write(f, b);
             }
         }
+    }
+
+    /// Empreinte d'un fichier, relue seulement s'il a changé depuis la dernière fois.
+    pub fn hash(&mut self, rel: &str, path: &Path) -> Result<[u8; 32]> {
+        let meta = fs::metadata(path)?;
+        self.get(rel, path, &meta)
     }
 
     fn get(&mut self, rel: &str, path: &Path, meta: &fs::Metadata) -> Result<[u8; 32]> {
@@ -102,7 +128,9 @@ pub fn set_mode(path: &Path, mode: u32) {
 
 /// Fichiers du projet : tout sauf `.git` et ce que `.gitignore` / `.echoesignore` excluent.
 /// Avec `everything`, aucune règle d'exclusion (sert à rapatrier des produits de build).
-pub fn scan(root: &Path, start: &Path, everything: bool, cache: &mut HashCache) -> Result<Vec<Entry>> {
+/// Les fichiers illisibles ou disparus en cours de route sont ignorés, pas fatals.
+/// `tick` est appelé à chaque fichier (pour donner signe de vie pendant un long inventaire).
+pub fn scan(root: &Path, start: &Path, everything: bool, cache: &mut HashCache, tick: &mut dyn FnMut() -> Result<()>) -> Result<Vec<Entry>> {
     let mut walk = WalkBuilder::new(start);
     walk.hidden(false).parents(false).git_global(false).git_exclude(false).require_git(false);
     if everything {
@@ -110,16 +138,17 @@ pub fn scan(root: &Path, start: &Path, everything: bool, cache: &mut HashCache) 
     } else {
         walk.add_custom_ignore_filename(".echoesignore");
     }
-    walk.filter_entry(|e| e.file_name() != ".git");
+    walk.filter_entry(|e| e.file_name() != ".git" && !e.file_name().to_string_lossy().ends_with(PART));
     let mut out = Vec::new();
     for item in walk.build() {
-        let item = item?;
-        let meta = item.metadata()?;
+        tick()?;
+        let Ok(item) = item else { continue };
+        let Ok(meta) = item.metadata() else { continue };
         if !meta.is_file() {
             continue;
         }
         let Some(path) = rel(root, item.path()) else { continue };
-        let hash = cache.get(&path, item.path(), &meta)?;
+        let Ok(hash) = cache.get(&path, item.path(), &meta) else { continue };
         out.push(Entry { path, hash, mode: mode(&meta), size: meta.len() });
     }
     Ok(out)
@@ -148,9 +177,20 @@ pub fn send_file(conn: &mut Secure, root: &Path, entry: &Entry, pulled: bool) ->
     }
 }
 
+/// Suffixe des fichiers en cours de réception.
+const PART: &str = ".echoes-part";
+
 /// Écrit un fichier reçu morceau par morceau, via un fichier temporaire.
 pub struct Receiver {
     current: Option<(PathBuf, PathBuf, File)>,
+}
+
+impl Drop for Receiver {
+    fn drop(&mut self) {
+        if let Some((_, tmp, _)) = self.current.take() {
+            let _ = fs::remove_file(tmp);
+        }
+    }
 }
 
 impl Receiver {
@@ -158,16 +198,18 @@ impl Receiver {
         Receiver { current: None }
     }
 
-    /// `dest` vaut `None` quand le fichier doit être ignoré.
+    /// `dest` vaut `None` quand le fichier doit être ignoré. Un transfert interrompu ne laisse rien derrière lui.
     pub fn chunk(&mut self, dest: Option<PathBuf>, mode: u32, first: bool, last: bool, data: &[u8]) -> Result<()> {
         if first {
-            self.current = None;
+            if let Some((_, tmp, _)) = self.current.take() {
+                let _ = fs::remove_file(tmp);
+            }
             if let Some(dest) = dest {
                 if let Some(parent) = dest.parent() {
                     fs::create_dir_all(parent)?;
                 }
                 let mut name = dest.file_name().unwrap_or_default().to_os_string();
-                name.push(".echoes-part");
+                name.push(PART);
                 let tmp = dest.with_file_name(name);
                 self.current = Some((dest, tmp.clone(), File::create(tmp)?));
             }
@@ -199,5 +241,21 @@ mod tests {
         assert!(resolve_file(root, "c:/x").is_err());
         assert!(resolve_file(root, "").is_err());
         assert_eq!(resolve(root, "").unwrap(), root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_dest_refuses_git_and_symlinks() {
+        let root = std::env::temp_dir().join(format!("echoes-safe-{}", std::process::id()));
+        let outside = std::env::temp_dir().join(format!("echoes-out-{}", std::process::id()));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("vendor")).unwrap();
+        assert!(safe_dest(&root, "src/new.rs").is_ok());
+        assert!(safe_dest(&root, "vendor/out").is_err());
+        assert!(safe_dest(&root, ".git/hooks/pre-commit").is_err());
+        assert!(safe_dest(&root, "src/.git/x").is_ok());
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&outside);
     }
 }

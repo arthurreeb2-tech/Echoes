@@ -31,6 +31,12 @@ fn quiet(cmd: &mut Command) -> bool {
     cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().map(|s| s.success()).unwrap_or(false)
 }
 
+/// Version de la copie installée, lue en la lançant.
+pub fn installed_version() -> Option<String> {
+    let out = Command::new(bin_path().ok()?).arg("--version").output().ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).split_whitespace().last()?.to_string())
+}
+
 pub fn is_installed() -> bool {
     bin_path().map(|p| p.exists()).unwrap_or(false) && config::load_key().ok().flatten().is_some()
 }
@@ -56,9 +62,22 @@ pub fn run(code: Option<String>, open: bool) -> Result<()> {
     fs::create_dir_all(dest.parent().unwrap())?;
     let me = std::env::current_exe()?;
     if fs::canonicalize(&me).ok() != fs::canonicalize(&dest).ok() {
+        // Copie du contenu seul : `fs::copy` recopierait aussi la marque de quarantaine que macOS
+        // pose sur ce qui vient d'un navigateur, et le service serait alors bloqué au lancement.
         let tmp = dest.with_extension("new");
-        fs::copy(&me, &tmp).context("copie du programme impossible")?;
-        fs::rename(&tmp, &dest).or_else(|_| fs::copy(&me, &dest).map(|_| ()))?;
+        fs::write(&tmp, fs::read(&me).context("lecture du programme impossible")?).context("copie du programme impossible")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&tmp, fs::Permissions::from_mode(0o755))?;
+        }
+        if fs::rename(&tmp, &dest).is_err() {
+            fs::copy(&tmp, &dest)?;
+            let _ = fs::remove_file(&tmp);
+        }
+        if cfg!(target_os = "macos") {
+            quiet(Command::new("xattr").args(["-d", "com.apple.quarantine"]).arg(&dest));
+        }
     }
     let path_note = ensure_path()?;
 
@@ -72,7 +91,7 @@ pub fn run(code: Option<String>, open: bool) -> Result<()> {
     println!("Echoes {} est installé : {}", env!("CARGO_PKG_VERSION"), dest.display());
     if active {
         println!("Service actif, lancé automatiquement à chaque ouverture de session, mis à jour automatiquement.");
-    } else {
+    } else if !cfg!(target_os = "macos") {
         println!("Démarrage automatique indisponible ici : lance `echoes serve` toi-même pour prêter cette machine.");
     }
     if let Some(note) = path_note {
@@ -136,8 +155,9 @@ fn plist_path() -> Result<PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-fn domain() -> String {
-    format!("gui/{}", unsafe { libc::getuid() })
+fn domains() -> [String; 2] {
+    let uid = unsafe { libc::getuid() };
+    [format!("gui/{uid}"), format!("user/{uid}")]
 }
 
 #[cfg(target_os = "macos")]
@@ -176,23 +196,24 @@ fn start_service(bin: &Path) -> Result<bool> {
     fs::create_dir_all(file.parent().unwrap())?;
     fs::write(&file, plist)?;
     // `bootout` est asynchrone : on réessaie quelques fois le temps que l'ancien service s'arrête.
-    let mut ok = false;
-    for _ in 0..5 {
-        if quiet(Command::new("launchctl").args(["bootstrap", &domain()]).arg(&file)) {
-            ok = true;
-            break;
+    // Sans session graphique (installation par SSH), le domaine `gui` n'existe pas : repli sur `user`.
+    for _ in 0..4 {
+        for domain in domains() {
+            if quiet(Command::new("launchctl").args(["bootstrap", &domain]).arg(&file)) {
+                return Ok(true);
+            }
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    if !ok {
-        anyhow::bail!("launchctl n'a pas pu démarrer le service (journal : {})", log.display());
-    }
-    Ok(true)
+    println!("Le service n'a pas pu démarrer maintenant (aucune session ouverte sur ce Mac ?). Il démarrera à la prochaine ouverture de session ; journal : {}", log.display());
+    Ok(false)
 }
 
 #[cfg(target_os = "macos")]
 fn stop_service() {
-    let _ = quiet(Command::new("launchctl").args(["bootout", &format!("{}/{LABEL}", domain())]));
+    for domain in domains() {
+        let _ = quiet(Command::new("launchctl").args(["bootout", &format!("{domain}/{LABEL}")]));
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -312,6 +333,9 @@ fn ensure_path() -> Result<Option<String>> {
         ".bash_profile"
     } else if shell.ends_with("bash") {
         ".bashrc"
+    } else if cfg!(target_os = "macos") {
+        // Lancée depuis le Finder, l'app ne connaît pas toujours le shell : zsh est celui de macOS.
+        ".zshrc"
     } else {
         ".profile"
     });

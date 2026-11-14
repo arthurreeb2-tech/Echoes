@@ -32,7 +32,7 @@ ol.steps li { counter-increment: s; display: grid; grid-template-columns: 32px 1
 ol.steps li::before { content: counter(s); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
 ol.steps b { display: block; }
 ol.steps span { color: var(--muted); font-size: 15px; }
-.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px 28px; }
 .facts b { display: block; font-size: 16px; }
 .facts span { color: var(--muted); font-size: 15px; }
 details { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 16px; }
@@ -69,14 +69,15 @@ footer a { color: var(--ink); }
   <h2>Installation</h2>
   <ol class="steps">
     <li><div><b id="step1">Ouvre le fichier téléchargé</b><span id="step1-s">Sur Mac, glisse Echoes dans le dossier Applications, puis lance-le.</span></div></li>
-    <li><div><b>Le tableau de bord s'ouvre</b><span>Echoes s'installe en arrière-plan et démarre avec ta session. Sur ta première machine, il t'affiche un code d'appairage.</span></div></li>
-    <li><div><b>Sur tes autres machines, colle ce code</b><span>Dans la rubrique « Appairage » du tableau de bord. Elles se trouvent ensuite toutes seules sur le réseau local.</span></div></li>
+    <li><div><b id="step2">Le tableau de bord s'ouvre une première fois</b><span>Echoes s'installe en arrière-plan et démarre avec ta session. Sur ta première machine, tu trouves ton code d'appairage dans la rubrique « Appairage ».</span></div></li>
+    <li><div><b>Sur tes autres machines, colle ce code</b><span>Dans la rubrique « Appairage » du tableau de bord. Elles se trouvent ensuite toutes seules sur le même réseau local ; si le système demande d'autoriser Echoes sur le réseau, accepte. Garde ce code secret : il permet de lancer des commandes sur toutes tes machines.</span></div></li>
   </ol>
 
   <h2>Ce qu'il fait, et ce qu'il ne fait pas</h2>
   <div class="facts">
-    <div><b>Invisible</b><span>Pas d'icône dans le Dock ni de fenêtre. Le tableau de bord ne s'ouvre que si tu le demandes.</span></div>
-    <div><b>Chez toi seulement</b><span>Tes machines se parlent en direct sur ton réseau, chiffré. Rien ne passe par un serveur.</span></div>
+    <div><b>Invisible</b><span>Pas d'icône dans le Dock ni de fenêtre. Après l'installation, le tableau de bord ne s'ouvre que si tu le demandes.</span></div>
+    <div><b>Attentif</b><span>Une machine prise par un montage ou un rendu 3D est ménagée : les tâches vont ailleurs, ou y tournent bridées.</span></div>
+    <div><b>Chez toi seulement</b><span>Tes machines se parlent en direct sur ton réseau, chiffré. Aucun serveur entre elles ; seules les mises à jour viennent de GitHub.</span></div>
     <div><b>Toujours à jour</b><span>Les nouvelles versions s'installent seules, quand aucune tâche ne tourne.</span></div>
   </div>
 
@@ -84,7 +85,7 @@ footer a { color: var(--ink); }
     <summary>Premier lancement : macOS ou Windows demande une confirmation</summary>
     <p>Echoes n'est pas encore signé par Apple ni par Microsoft, alors le système demande une confirmation la première fois :</p>
     <ul>
-      <li><b>macOS</b> : si Echoes refuse de s'ouvrir, va dans Réglages Système &gt; Confidentialité et sécurité, puis « Ouvrir quand même ».</li>
+      <li><b>macOS</b> : si Echoes refuse de s'ouvrir, va dans Réglages Système &gt; Confidentialité et sécurité, puis « Ouvrir quand même ». Si macOS le dit « endommagé », ouvre le Terminal et lance <code>xattr -dr com.apple.quarantine /Applications/Echoes.app</code>.</li>
       <li><b>Windows</b> : sur « Windows a protégé votre ordinateur », clique « Informations complémentaires », puis « Exécuter quand même ».</li>
     </ul>
   </details>
@@ -101,7 +102,8 @@ footer a { color: var(--ink); }
 // Un seul bouton : celui du système de la personne qui visite.
 const base = "https://github.com/arthurreeb2-tech/Echoes/releases/latest/download/";
 const ua = navigator.userAgent, plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-const mobile = /iPhone|iPad|Android/i.test(ua);
+// Un iPad récent se présente comme un Mac : on le reconnaît à son écran tactile.
+const mobile = /iPhone|iPad|Android/i.test(ua) || (/Mac/i.test(plat) && navigator.maxTouchPoints > 1);
 let os = null;
 if (/Mac/i.test(plat) || /Macintosh/i.test(ua)) os = "mac";
 else if (/Win/i.test(plat) || /Windows/i.test(ua)) os = "win";
@@ -122,7 +124,13 @@ if (mobile) {
 } else if (os === "linux") {
   cta.href = "#linux"; label.textContent = "Installer sous Linux";
   document.getElementById("meta").textContent = "Une commande dans le terminal";
+  document.getElementById("step1").textContent = "Lance la commande d'installation";
+  document.getElementById("step1-s").textContent = "Elle est donnée plus bas, dans « Linux et ligne de commande ».";
+  document.getElementById("step2").textContent = "Echoes s'installe en arrière-plan";
 }
+// Un lien vers « #linux » déplie la rubrique.
+function openTarget() { const t = document.getElementById(location.hash.slice(1)); if (t && t.tagName === "DETAILS") t.open = true; }
+addEventListener("hashchange", openTarget); openTarget();
 </script>
 </body>
 </html>

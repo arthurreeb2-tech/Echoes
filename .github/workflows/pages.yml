@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
     paths: [docs/**]
+  # Republiée après chaque version, pour que les boutons pointent sur des fichiers qui existent.
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 permissions:

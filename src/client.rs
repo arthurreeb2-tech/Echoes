@@ -81,8 +81,9 @@ pub fn find(key: &[u8; 32], me: &str, fresh: bool) -> Vec<(SocketAddr, Status)> 
     let mut known = static_hosts();
     known.extend(config::load_peers());
     let mut found = if fresh { vec![] } else { probe_all(&known, key, me) };
-    if found.is_empty() {
+    if found.is_empty() || config::peers_stale() {
         known.extend(discover::browse(Duration::from_millis(if fresh { 1500 } else { 800 })));
+        known.sort();
         known.dedup();
         found = probe_all(&known, key, me);
         config::save_peers(&found.iter().map(|(a, _)| *a).collect::<Vec<_>>());
@@ -95,7 +96,21 @@ pub fn list() -> Result<()> {
     let key = config::require_key()?;
     let me = status::local()?;
     let line = |s: &Status, place: &str| {
-        println!("{:<22} {:<16} v{:<7} {:>2} cœurs  {:>4.1} libres  {:>3.0} Go  score {:>6.0}  {}", s.name, format!("{}/{}", s.os, s.arch), s.version, s.cores, s.free, s.mem_gb, s.score(), place)
+        let gpu = s.gpu.map(|g| format!("{g:>3.0} %")).unwrap_or_else(|| "    –".into());
+        println!(
+            "{:<22} {:<16} v{:<7} {:>2} cœurs  {:>4.1} libres  carte graphique {}  mémoire libre {:>4.1}/{:.0} Go  puissance {:>5.0}{}  {}",
+            s.name,
+            format!("{}/{}", s.os, s.arch),
+            s.version,
+            s.cores,
+            s.free,
+            gpu,
+            s.mem_free_gb,
+            s.mem_gb,
+            s.score(),
+            if s.busy() { " (occupée)" } else { "" },
+            place
+        )
     };
     line(&me, "cette machine");
     let others = find(&key, &me.id, true);
@@ -159,25 +174,37 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     };
     let me = me.join().map_err(|_| anyhow!("mesure locale impossible"))??;
     let forced = opts.remote || opts.host.is_some();
-    let Some((addr, target)) = candidates.into_iter().next() else {
+    if candidates.is_empty() {
         if forced {
             bail!("aucune machine disponible sur le réseau");
         }
         note("aucune autre machine disponible, exécution ici");
         return run_local(&opts.command, rec, "aucune autre machine disponible");
-    };
-    if !forced && target.score() < me.score() * REMOTE_ADVANTAGE {
-        note(&format!("cette machine est la plus disponible (score {:.0} contre {:.0} pour {}), exécution ici", me.score(), target.score(), target.name));
-        return run_local(&opts.command, rec, &format!("plus disponible ici que {}", target.name));
     }
-    match remote(addr, &target, &key, opts, &me, &note, rec)? {
-        Some(code) => Ok(code),
-        None if forced => bail!("{} n'accepte pas de tâche pour l'instant", target.name),
-        None => {
-            note(&format!("{} indisponible pour l'instant, exécution ici", target.name));
-            run_local(&opts.command, rec, &format!("{} indisponible", target.name))
+    // De la plus disponible à la moins disponible ; une machine qui refuse (occupée) passe la main à la suivante.
+    let mut refused = Vec::new();
+    for (addr, target) in &candidates {
+        if !forced && target.score() < me.score() * REMOTE_ADVANTAGE {
+            break;
         }
+        if let Some(code) = remote(*addr, target, &key, opts, &me, &note, rec)? {
+            return Ok(code);
+        }
+        refused.push(target.name.clone());
     }
+    if forced {
+        bail!("aucune machine n'accepte de tâche pour l'instant ({})", refused.join(", "));
+    }
+    let best = &candidates[0].1;
+    let reason = if refused.is_empty() {
+        let why = if best.busy() { format!("{} est occupée ({})", best.name, best.load_note()) } else { format!("plus disponible ici que {}", best.name) };
+        note(&format!("{why} : puissance {:.0} là-bas contre {:.0} ici, exécution ici", best.score(), me.score()));
+        why
+    } else {
+        note(&format!("{} indisponible pour l'instant, exécution ici", refused.join(", ")));
+        format!("{} indisponible", refused.join(", "))
+    };
+    run_local(&opts.command, rec, &reason)
 }
 
 /// Dossier à synchroniser : la racine du dépôt git si on est dedans, sinon le dossier courant.
@@ -205,11 +232,8 @@ fn pull_path(root: &Path, cwd: &Path, p: &str) -> Result<String> {
     sync::rel(root, &out).ok_or_else(|| anyhow!("--pull {p} : chemin hors du projet"))
 }
 
-/// Garde-fous : jamais le dossier personnel entier, ni un projet démesuré.
-fn too_big(root: &Path, manifest: &[Entry]) -> Option<String> {
-    if Some(root) == dirs::home_dir().as_deref() || root.parent().is_none() {
-        return Some("le dossier courant est le dossier personnel ou la racine du disque".into());
-    }
+/// Garde-fou : pas de projet démesuré.
+fn too_big(manifest: &[Entry]) -> Option<String> {
     let size: u64 = manifest.iter().map(|e| e.size).sum();
     if manifest.len() > 50_000 || size > 4 << 30 {
         return Some(format!("projet trop volumineux ({} fichiers, {:.1} Go) : ajoute un .echoesignore", manifest.len(), size as f64 / (1u64 << 30) as f64));
@@ -221,11 +245,19 @@ fn too_big(root: &Path, manifest: &[Entry]) -> Option<String> {
 fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me: &Status, note: &impl Fn(&str), rec: &mut Record) -> Result<Option<i32>> {
     let cwd = std::env::current_dir()?;
     let root = project_root(&cwd);
+    if Some(root.as_path()) == dirs::home_dir().as_deref() || root.parent().is_none() {
+        let reason = "le dossier courant est le dossier personnel ou la racine du disque";
+        if opts.remote || opts.host.is_some() {
+            bail!("{reason}");
+        }
+        note(&format!("{reason}, exécution ici"));
+        return run_local(&opts.command, rec, reason).map(Some);
+    }
     let project = blake3::hash(format!("{}:{}", me.id, root.display()).as_bytes()).to_hex()[..12].to_string();
     let mut cache = sync::HashCache::load(config::data_dir()?.join(format!("cache-{project}")));
-    let manifest = sync::scan(&root, &root, false, &mut cache)?;
+    let manifest = sync::scan(&root, &root, false, &mut cache, &mut || Ok(()))?;
     cache.save();
-    if let Some(reason) = too_big(&root, &manifest) {
+    if let Some(reason) = too_big(&manifest) {
         if opts.remote || opts.host.is_some() {
             bail!("{reason}");
         }
@@ -238,19 +270,28 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
     let name = root.file_name().and_then(|n| n.to_str()).unwrap_or("projet").to_string();
 
     let Ok(mut conn) = connect(addr, key) else { return Ok(None) };
-    conn.stream().set_read_timeout(Some(Duration::from_secs(120)))?;
-    conn.send(&Msg::Run { project, name, manifest: manifest.clone(), cwd: rel_cwd, command: opts.command.clone(), pull })?;
-    let need = match conn.recv()? {
-        Msg::Need(n) => n,
-        Msg::Error(e) => {
-            note(&format!("{} : {e}", target.name));
-            return Ok(None);
+    // L'autre machine donne signe de vie toutes les 2 s au plus, même pendant ses traitements longs.
+    conn.stream().set_read_timeout(Some(Duration::from_secs(45)))?;
+    conn.stream().set_write_timeout(Some(Duration::from_secs(45)))?;
+    conn.send(&Msg::Run { project, name, manifest: manifest.clone(), cwd: rel_cwd, command: opts.command.clone(), pull: pull.clone() })?;
+    let need = loop {
+        match conn.recv() {
+            Ok(Msg::Need(n)) => break n,
+            Ok(Msg::Ping) => continue,
+            Ok(Msg::Error(e)) => {
+                note(&format!("{} : {e}", target.name));
+                return Ok(None);
+            }
+            // Rien n'a encore été exécuté là-bas : on peut passer à une autre machine.
+            Ok(_) | Err(_) => return Ok(None),
         }
-        _ => bail!("réponse inattendue"),
     };
+    if target.arch != me.arch && !pull.is_empty() {
+        note(&format!("attention : {} est en {}, cette machine en {} ; les fichiers compilés rapatriés par --pull ne s'exécuteront pas ici", target.name, target.arch, me.arch));
+    }
     rec.remote = true;
     rec.target = target.name.clone();
-    note(&format!("→ {} ({}/{}, {:.1} cœurs libres), {} fichier(s) à envoyer sur {}", target.name, target.os, target.arch, target.free, need.len(), manifest.len()));
+    note(&format!("→ {} ({}/{}, {}), {} fichier(s) à envoyer sur {}", target.name, target.os, target.arch, target.load_note(), need.len(), manifest.len()));
     for path in &need {
         let entry = by_path.get(path.as_str()).ok_or_else(|| anyhow!("fichier inconnu demandé : {path}"))?;
         sync::send_file(&mut conn, &root, entry, false)?;
@@ -258,7 +299,6 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
         rec.sent_bytes += entry.size;
     }
     conn.send(&Msg::FilesDone)?;
-    conn.stream().set_read_timeout(Some(Duration::from_secs(30)))?;
     let started = Instant::now();
     let mut finished: Option<Instant> = None;
 
@@ -278,15 +318,21 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
             Msg::Output { err: true, data } => std::io::stderr().write_all(&data)?,
             Msg::Ping | Msg::FilesDone => {}
             Msg::File { path, mode, first, last, pulled, data } => {
-                let dest = sync::resolve_file(&root, &path)?;
                 if first {
-                    let keep = pulled || safe_to_write(&dest, by_path.get(path.as_str()).copied());
+                    // On ne se fie pas à l'autre machine : `pulled` n'est admis que sous un chemin demandé
+                    // par --pull, et rien ne s'écrit dans .git ni à travers un lien symbolique.
+                    let asked = pulled && pull.iter().any(|p| p.is_empty() || path == *p || path.starts_with(&format!("{p}/")));
+                    let dest = sync::safe_dest(&root, &path).ok();
+                    let keep = match &dest {
+                        Some(d) => asked || safe_to_write(d, by_path.get(path.as_str()).copied()),
+                        None => false,
+                    };
                     if keep {
                         updated += 1;
                     } else {
                         skipped.push(path.clone());
                     }
-                    receiver.chunk(keep.then_some(dest), mode, first, last, &data)?;
+                    receiver.chunk(dest.filter(|_| keep), mode, first, last, &data)?;
                 } else {
                     receiver.chunk(None, mode, first, last, &data)?;
                 }
@@ -301,7 +347,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
                     note(&format!("← {updated} fichier(s) rapatrié(s)"));
                 }
                 for p in skipped {
-                    eprintln!("echoes: {p} a changé ici pendant l'exécution, version distante ignorée");
+                    eprintln!("echoes: {p} n'a pas été rapatrié (modifié ici entre-temps, ou emplacement protégé)");
                 }
                 return Ok(Some(code));
             }
