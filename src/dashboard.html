@@ -20,6 +20,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -27,73 +28,96 @@ body {
 }
 main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
-h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
-h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
-h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 30px 0 10px; }
+h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+h1 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 32px 0 8px; }
 .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
-.seg button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.seg button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-.tile .k { color: var(--muted); font-size: 12.5px; }
-.tile .v { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.tile .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
-.machines { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.m { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-.m.off { opacity: .55; }
+.hero .k { color: var(--muted); font-size: 12px; }
+.hero .v { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.hero .s { color: var(--muted); font-size: 12px; }
+.hero details { margin-top: 4px; }
+.hero summary, details.pair summary { cursor: pointer; color: var(--muted); font-size: 12px; min-height: 24px; display: flex; align-items: center; gap: 6px; }
+.hero summary::before, details.pair summary::before { content: "▸"; }
+details[open] > summary::before { content: "▾"; }
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+@media (pointer: coarse) { .seg button, button.act { min-height: 44px; } .hero summary, details.pair summary { min-height: 44px; } }
+.hero details p { color: var(--muted); font-size: 12px; max-width: 60ch; margin: 6px 0 0; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.tile .k { color: var(--muted); font-size: 12px; }
+.tile .v { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--muted); font-size: 12px; }
+.machines { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.m { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 4px 20px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.m:last-child { border-bottom: 0; }
+.m .top, .m .meta { grid-column: 1; }
+.m .load, .m .row { grid-column: 2; }
+.m .load { grid-row: 1; align-self: end; }
+.m .row { grid-row: 2; margin-top: 0; }
+.m.off .name, .m.off .meta, .m.off .row { color: var(--muted); }
 .m .top { display: flex; align-items: center; gap: 8px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 .off .dot { background: var(--local); }
 .m .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
-.m .meta { color: var(--muted); font-size: 12.5px; margin: 4px 0 10px; }
+.tag { margin-left: 4px; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.m .meta { color: var(--muted); font-size: 12px; }
 .load { height: 6px; background: var(--bar); border-radius: 3px; overflow: hidden; }
 .load i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 .m .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .share { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-.share .line { display: grid; grid-template-columns: 140px 1fr 90px; gap: 12px; align-items: center; padding: 5px 0; }
+.share .line { display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; align-items: center; padding: 5px 0; }
 .share .line span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share .track { height: 10px; background: var(--bar); border-radius: 5px; overflow: hidden; }
 .share .track i { display: block; height: 100%; background: var(--accent); }
 .share .track i.loc { background: var(--local); }
+.legend { color: var(--muted); font-size: 12px; margin: 8px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent); }
+.legend i.loc { background: var(--local); margin-left: 8px; }
 .share .line span:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .table { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 12px; font-weight: 600; color: var(--muted); }
 tr:last-child td { border-bottom: 0; }
-td.cmd { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+td.cmd { font-family: var(--mono); font-size: 12px; word-break: break-all; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 td .sub { display: block; color: var(--muted); font-size: 12px; font-family: inherit; }
 .route { white-space: nowrap; }
 .route b { font-weight: 600; }
-.pill { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 8px; }
+.pill { display: inline-block; font-size: 12px; border-radius: 999px; padding: 1px 8px; }
 .pill.ok { background: var(--accent-soft); color: var(--accent); }
 .pill.ko { background: var(--warn-soft); color: var(--warn); }
 .gain { color: var(--accent); }
 .loss { color: var(--warn); }
+button.more { margin-top: 8px; }
 .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
 details.pair { margin-top: 30px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
-details.pair summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-.pair p { color: var(--muted); font-size: 13px; margin: 10px 0; }
-.pair code { font-family: var(--mono); font-size: 12.5px; word-break: break-all; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; display: block; }
+
+.pair p { color: var(--muted); font-size: 12px; margin: 10px 0; }
+.pair code { font-family: var(--mono); font-size: 12px; word-break: break-all; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; display: block; }
 .pair form { display: flex; gap: 8px; flex-wrap: wrap; }
-.pair input { flex: 1; min-width: 220px; font: inherit; font-family: var(--mono); font-size: 12.5px; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
-button.act { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.pair input { flex: 1; min-width: 220px; font: inherit; font-family: var(--mono); font-size: 12px; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+button.act { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
 .foot { color: var(--muted); font-size: 12px; margin-top: 14px; }
 .err { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
 @media (max-width: 760px) {
-  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .tiles { grid-template-columns: 1fr; gap: 10px; }
+  .m { display: block; }
+  .m .meta { margin: 2px 0 8px; }
+  .m .row { margin-top: 6px; }
   .share .line { grid-template-columns: 96px 1fr auto; }
-  .share .line span:last-child { white-space: nowrap; font-size: 12.5px; }
+  .share .line span:last-child { white-space: nowrap; font-size: 12px; }
   .hide-sm { display: none; }
   thead { display: none; }
   table, tbody, tr, td { display: block; }
   tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
   tr:last-child { border-bottom: 0; }
   td { border: 0; padding: 1px 0; }
-  td.num { text-align: left; color: var(--muted); font-size: 12.5px; }
-  td.num::before { content: "Durée "; }
+  td.num, td.hide-sm { display: inline-block; text-align: left; color: var(--muted); font-size: 12px; margin: 4px 12px 0 0; }
+  td.num:not(.hide-sm)::before { content: "Durée "; }
+  td.num.hide-sm::before { content: "Gain "; }
   td.cmd { margin: 4px 0 2px; }
   .route { white-space: normal; }
 }
@@ -109,11 +133,17 @@ button.act { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6
   </header>
   <div id="error" class="err" hidden></div>
 
-  <section class="tiles" aria-label="Résumé">
-    <div class="tile"><div class="k">Tâches déléguées</div><div class="v" id="t-del">–</div><div class="s" id="t-del-s"></div></div>
-    <div class="tile"><div class="k">Temps gagné (estimé)</div><div class="v" id="t-gain">–</div><div class="s" id="t-gain-s"></div></div>
-    <div class="tile"><div class="k">Calcul fait ailleurs</div><div class="v" id="t-cpu">–</div><div class="s" id="t-cpu-s"></div></div>
-    <div class="tile"><div class="k">Données envoyées</div><div class="v" id="t-data">–</div><div class="s" id="t-data-s"></div></div>
+  <section class="hero" aria-label="Résumé">
+    <div class="k">Temps gagné (estimé)</div><div class="v" id="t-gain">–</div><div class="s" id="t-gain-s"></div>
+    <details>
+      <summary>Comment ce gain est estimé</summary>
+      <p>Le gain est une estimation : durée de la commande sur la machine distante × rapport de puissance disponible entre les deux machines, transferts déduits.</p>
+    </details>
+    <div class="tiles">
+      <div class="tile"><div class="k">Tâches déléguées</div><div class="v" id="t-del">–</div><div class="s" id="t-del-s"></div></div>
+      <div class="tile"><div class="k">Calcul fait ailleurs</div><div class="v" id="t-cpu">–</div><div class="s" id="t-cpu-s"></div></div>
+      <div class="tile"><div class="k">Données envoyées</div><div class="v" id="t-data">–</div><div class="s" id="t-data-s"></div></div>
+    </div>
   </section>
 
   <h2>Machines du réseau</h2>
@@ -127,11 +157,14 @@ button.act { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6
     <table>
       <thead><tr><th>Quand</th><th>Commande</th><th>Trajet</th><th class="num">Durée</th><th class="num hide-sm">Gain</th><th class="hide-sm">Résultat</th></tr></thead>
       <tbody id="rows"></tbody>
+      <tbody id="rows-more" hidden></tbody>
     </table>
   </section>
+  <button class="act more" id="more" type="button" aria-controls="rows-more" aria-expanded="false" hidden>Afficher les tâches plus anciennes</button>
 
-  <details class="pair">
+  <details class="pair" id="pair">
     <summary>Appairage</summary>
+    <p id="pair-first" hidden>Cette machine est seule pour l'instant. Installe Echoes sur une autre de tes machines, puis colle-y le code ci-dessous.</p>
     <p>Le code d'appairage relie tes machines entre elles. Garde-le secret : il permet d'exécuter des commandes sur toutes.</p>
     <button class="act" id="show-code" type="button">Afficher le code de ce réseau</button>
     <code id="code" hidden></code>
@@ -139,12 +172,12 @@ button.act { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6
     <form id="join"><input id="join-code" placeholder="64 caractères" autocomplete="off" spellcheck="false"><button class="act" type="submit">Rejoindre</button></form>
     <p id="join-msg" hidden></p>
   </details>
-  <p class="foot">Le gain est une estimation : durée de la commande sur la machine distante × rapport de puissance disponible entre les deux machines, transferts déduits. Page locale, visible de cette machine seulement.</p>
+  <p class="foot">Page locale, visible de cette machine seulement.</p>
 </main>
 <script>
 const token = location.hash.slice(1);
 const $ = id => document.getElementById(id);
-let period = 7, last = null;
+let period = 7, last = null, pairOpened = false;
 try { period = +(localStorage.getItem("echoes-period") ?? 7); } catch (e) {}
 
 async function api(path, opts = {}) {
@@ -195,7 +228,7 @@ function render(st) {
   const gain = remote.reduce((a, r) => a + gainOf(r), 0);
   $("t-gain").textContent = remote.length ? dur(gain) : "–";
   $("t-gain").className = "v " + (gain >= 0 ? "" : "loss");
-  $("t-gain-s").textContent = remote.length ? `≈ ${dur(remote.reduce((a, r) => a + r.est_local_ms, 0))} ici, ${dur(remote.reduce((a, r) => a + r.total_ms, 0))} en vrai` : "";
+  $("t-gain-s").textContent = !remote.length ? "aucune tâche déléguée sur cette période" : `≈ ${dur(remote.reduce((a, r) => a + r.est_local_ms, 0))} ici, ${dur(remote.reduce((a, r) => a + r.total_ms, 0))} en vrai`;
   const cpu = remote.reduce((a, r) => a + r.command_ms, 0);
   $("t-cpu").textContent = remote.length ? dur(cpu) : "–";
   $("t-cpu-s").textContent = remote.length ? "de commandes exécutées à distance" : "";
@@ -223,9 +256,9 @@ function render(st) {
   $("share").innerHTML = entries.length ? entries.map(([name, e]) => `<div class="line">
       <span title="${esc(name)}">${esc(name)}</span>
       <div class="track"><i class="${e.local === e.n ? "loc" : ""}" style="width:${(100 * e.ms / max).toFixed(1)}%"></i></div>
-      <span>${dur(e.ms)} · ${e.n}</span></div>`).join("") : `<div class="empty">Aucune tâche sur cette période.</div>`;
+      <span>${dur(e.ms)} · ${e.n} tâche${e.n > 1 ? "s" : ""}</span></div>`).join("") + `<p class="legend"><i></i> à distance <i class="loc"></i> sur la machine qui a lancé la tâche</p>` : `<div class="empty">Aucune tâche sur cette période.</div>`;
 
-  $("rows").innerHTML = tasks.length ? tasks.slice(0, 200).map(r => {
+  const row = r => {
     const g = gainOf(r);
     const route = r.remote ? `${esc(r.origin)} → <b>${esc(r.target)}</b>` : `<b>${esc(r.origin)}</b> <span class="sub">${esc(r.reason || "ici")}</span>`;
     const res = r.exit === 0 ? `<span class="pill ok">réussi</span>` : `<span class="pill ko">${r.exit == null ? "erreur" : "code " + r.exit}</span>`;
@@ -234,7 +267,22 @@ function render(st) {
       <td class="num">${dur(r.total_ms)}</td>
       <td class="num hide-sm ${g > 0 ? "gain" : g < 0 ? "loss" : ""}">${r.remote ? (g >= 0 ? "+" : "") + dur(g) : "–"}</td>
       <td class="hide-sm">${res}</td></tr>`;
-  }).join("") : `<tr><td colspan="6" class="empty">Aucune tâche sur cette période. Lance une commande avec « echoes run -- … ».</td></tr>`;
+  };
+  $("rows").innerHTML = tasks.length ? tasks.slice(0, 6).map(row).join("") : `<tr><td colspan="6" class="empty">Aucune tâche sur cette période. Lance une commande avec « echoes run -- … ».</td></tr>`;
+  const rest = tasks.slice(6, 200);
+  const open = $("more").getAttribute("aria-expanded") === "true";
+  $("more").hidden = !rest.length;
+  $("more").textContent = open ? "Masquer les tâches plus anciennes"
+    : `Afficher les ${rest.length} tâches plus anciennes` + (tasks.length > 200 ? " (les 200 dernières)" : "");
+  $("rows-more").innerHTML = rest.map(row).join("");
+  $("rows-more").hidden = !open;
+
+  const alone = st.machines.length < 2;
+  $("pair-first").hidden = !alone;
+  if (alone && !pairOpened) { $("pair").open = true; pairOpened = true; }
+  // Seule action utile sur une première machine : l'appairage passe juste sous le résumé.
+  const anchor = alone ? document.querySelector(".hero") : $("more");
+  if (anchor.nextElementSibling !== $("pair")) anchor.after($("pair"));
 }
 
 async function refresh() {
@@ -256,6 +304,10 @@ for (const b of document.querySelectorAll(".seg button")) {
     if (last) render(last);
   };
 }
+$("more").onclick = () => {
+  const b = $("more"); b.setAttribute("aria-expanded", String(b.getAttribute("aria-expanded") !== "true"));
+  if (last) render(last);
+};
 $("show-code").onclick = async () => {
   const c = $("code");
   if (!c.hidden) { c.hidden = true; return; }
