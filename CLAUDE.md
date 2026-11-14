@@ -50,5 +50,5 @@ Ne jamais affaiblir la sécurité : clé d'appairage, chiffrement Noise, refus d
 - `src/install.rs` : installation (launchd, systemd, tâche planifiée Windows), PATH, consigne globale Claude Code.
 - `src/update.rs` : mise à jour depuis les versions GitHub.
 - `src/history.rs` : journal des tâches. `src/dashboard.rs` + `src/dashboard.html` : tableau de bord local (127.0.0.1:47601, jeton dans l'adresse après `#`, contrôle de l'en-tête Host).
-- `packaging/macos/` : app `Echoes.app` (sans icône dans le Dock) et installateur `.pkg`. Sous Windows, l'installateur est le programme lui-même : lancé sans argument, il s'installe puis ouvre le tableau de bord.
+- `packaging/macos/` : app `Echoes.app` (sans icône dans le Dock) dans une image disque `.dmg` à glisser dans Applications ; au premier lancement, l'app s'installe et ouvre le tableau de bord. `docs/index.html` : page de téléchargement (GitHub Pages, `.github/workflows/pages.yml`). Sous Windows, l'installateur est le programme lui-même : lancé sans argument, il s'installe puis ouvre le tableau de bord.
 - `tests/e2e.rs` : deux « machines » sur la même, de bout en bout.

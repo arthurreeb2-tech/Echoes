@@ -14,11 +14,14 @@ jobs:
       - uses: actions/checkout@v4
       - run: cargo build --locked
       - run: cargo test --locked
-      - name: Installateur macOS (Intel + Apple Silicon)
+      - name: Image disque macOS (Intel + Apple Silicon)
         if: matrix.os == 'macos-latest'
         run: |
           rustup target add x86_64-apple-darwin aarch64-apple-darwin
           cargo build --locked --target x86_64-apple-darwin
           cargo build --locked --target aarch64-apple-darwin
-          packaging/macos/build-pkg.sh 0.0.0 target/aarch64-apple-darwin/debug/echoes target/x86_64-apple-darwin/debug/echoes Echoes-macOS.pkg
-          pkgutil --payload-files Echoes-macOS.pkg | grep -q "Echoes.app/Contents/MacOS/Echoes"
+          packaging/macos/build-dmg.sh 0.0.0 target/aarch64-apple-darwin/debug/echoes target/x86_64-apple-darwin/debug/echoes Echoes-macOS.dmg
+          hdiutil attach -nobrowse -mountpoint /tmp/echoes-dmg Echoes-macOS.dmg
+          lipo -archs /tmp/echoes-dmg/Echoes.app/Contents/MacOS/Echoes | grep -q "x86_64 arm64"
+          test -L /tmp/echoes-dmg/Applications
+          hdiutil detach /tmp/echoes-dmg

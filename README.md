@@ -10,14 +10,14 @@ Echoes mesure la puissance libre de chaque machine appairée (vitesse d'un cœur
 
 ## Installation
 
-**En double-clic**, depuis la page [Releases](https://github.com/arthurreeb2-tech/Echoes/releases/latest) :
+**Depuis la page de téléchargement** (`docs/index.html`, publiée sur GitHub Pages : https://arthurreeb2-tech.github.io/Echoes/), qui propose directement le bon fichier :
 
-- **Mac** (Intel et Apple Silicon) : `Echoes-macOS.pkg`. Ouvre-le et suis l'installateur. Le tableau de bord s'ouvre à la fin. Ensuite, l'app « Echoes » (Spotlight, Launchpad) le rouvre ; elle n'a pas d'icône dans le Dock.
+- **Mac** (Intel et Apple Silicon) : `Echoes-macOS.dmg`. Glisse Echoes dans Applications et lance-le : au premier lancement, il s'installe en arrière-plan et ouvre le tableau de bord. Ensuite, l'app « Echoes » (Spotlight, Launchpad) rouvre le tableau de bord ; elle n'a pas d'icône dans le Dock.
 - **Windows** : `Echoes-Setup-Windows.exe`. Double-clic, puis le tableau de bord s'ouvre ; un raccourci « Echoes » est ajouté au menu Démarrer.
 
 Pour relier une machine aux autres, colle le code d'appairage dans le tableau de bord (rubrique « Appairage »), ou passe-le en ligne de commande.
 
-Ces installateurs ne sont pas encore signés par Apple ni par Microsoft. Au premier lancement, macOS refuse d'ouvrir le `.pkg` : va dans Réglages Système > Confidentialité et sécurité > « Ouvrir quand même ». Windows affiche « Windows a protégé votre ordinateur » : « Informations complémentaires » > « Exécuter quand même ».
+Ces installateurs ne sont pas encore signés par Apple ni par Microsoft. Au premier lancement, macOS refuse d'ouvrir Echoes : va dans Réglages Système > Confidentialité et sécurité > « Ouvrir quand même ». Windows affiche « Windows a protégé votre ordinateur » : « Informations complémentaires » > « Exécuter quand même ».
 
 **Avec Claude Code** : ouvre ce dépôt et dis « installe » (voir `CLAUDE.md`).
 
@@ -36,7 +36,7 @@ L'installation :
 - ajoute à `~/.claude/CLAUDE.md` une consigne pour que Claude Code passe ses builds et ses tests par `echoes run --` ;
 - affiche le code d'appairage sur la première machine (`echoes pair` le réaffiche).
 
-`echoes uninstall` retire le tout (la clé d'appairage est conservée ; sur Mac, supprime aussi `/Applications/Echoes.app` à la main).
+`echoes uninstall` retire le tout (la clé d'appairage est conservée ; sur Mac, mets aussi `Echoes.app` à la corbeille).
 
 ## Tableau de bord
 

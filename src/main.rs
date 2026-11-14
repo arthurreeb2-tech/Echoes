@@ -77,6 +77,7 @@ fn main() {
         Ok(code) => code,
         Err(e) => {
             eprintln!("echoes: {e:#}");
+            alert(&format!("{e:#}"));
             1
         }
     };
@@ -133,5 +134,15 @@ fn real_main() -> Result<i32> {
         Cmd::Serve { port } => worker::serve(port).map(|_| 0),
         Cmd::Ls => client::list().map(|_| 0),
         Cmd::Run { host, local, remote, pull, quiet, command } => client::run(client::RunOpts { host, local, remote, pull, quiet, command }),
+    }
+}
+
+/// Lancé depuis le Finder (app Echoes), une erreur n'a pas de terminal où s'afficher : fenêtre d'alerte.
+fn alert(message: &str) {
+    use std::io::IsTerminal;
+    if cfg!(target_os = "macos") && std::env::args().len() == 1 && !std::io::stderr().is_terminal() {
+        let text = message.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!("display alert \"Echoes\" message \"{text}\" as critical");
+        let _ = std::process::Command::new("osascript").args(["-e", &script]).status();
     }
 }

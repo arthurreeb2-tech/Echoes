@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echoes</title>
+<meta name="description" content="Tes ordinateurs s'entraident : une tâche lourde lancée sur l'un tourne sur le plus disponible.">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #66635d; --line: #e6e3dc;
+  --accent: #2f6f5e; --on-accent: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151614; --panel: #1d1f1c; --ink: #ecebe6; --muted: #a29f97; --line: #2d302b; --accent: #7cc4ad; --on-accent: #10201b; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+main { max-width: 760px; margin: 0 auto; padding: 72px 20px 56px; }
+h1 { font-size: 44px; line-height: 1.1; letter-spacing: -0.03em; margin: 0 0 14px; font-weight: 700; }
+.lead { font-size: 20px; color: var(--muted); margin: 0 0 36px; max-width: 34em; }
+.cta { display: inline-flex; align-items: center; gap: 10px; background: var(--accent); color: var(--on-accent); text-decoration: none; font-weight: 600; font-size: 17px; padding: 14px 22px; border-radius: 10px; }
+.cta:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.cta svg { width: 18px; height: 18px; }
+.meta { color: var(--muted); font-size: 14px; margin: 12px 0 0; }
+.others { font-size: 14px; color: var(--muted); margin: 6px 0 0; }
+.others a { color: var(--ink); }
+.others span + span::before { content: " · "; }
+h2 { font-size: 14px; font-weight: 600; color: var(--muted); margin: 64px 0 16px; }
+ol.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 32px 1fr; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+ol.steps li::before { content: counter(s); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+ol.steps b { display: block; }
+ol.steps span { color: var(--muted); font-size: 15px; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.facts b { display: block; font-size: 16px; }
+.facts span { color: var(--muted); font-size: 15px; }
+details { margin-top: 48px; border-top: 1px solid var(--line); padding-top: 16px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 15px; }
+details p, details li { color: var(--muted); font-size: 15px; }
+code { font: 13px ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; word-break: break-all; }
+footer { margin-top: 56px; color: var(--muted); font-size: 14px; }
+footer a { color: var(--ink); }
+@media (max-width: 600px) {
+  main { padding-top: 48px; }
+  h1 { font-size: 36px; }
+  .lead { font-size: 18px; }
+  .facts { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Echoes</h1>
+  <p class="lead">Tes ordinateurs s'entraident. Lance une tâche lourde sur l'un, elle tourne sur le plus disponible du réseau, et le résultat revient comme si de rien n'était.</p>
+
+  <a class="cta" id="cta" href="https://github.com/arthurreeb2-tech/Echoes/releases/latest">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+    <span id="cta-label">Télécharger Echoes</span>
+  </a>
+  <p class="meta" id="meta">macOS 11 ou plus récent (Intel et Apple Silicon) · Windows 10 ou 11</p>
+  <p class="others" id="others">
+    Autres systèmes :
+    <span data-os="mac"><a href="https://github.com/arthurreeb2-tech/Echoes/releases/latest/download/Echoes-macOS.dmg">macOS</a></span>
+    <span data-os="win"><a href="https://github.com/arthurreeb2-tech/Echoes/releases/latest/download/Echoes-Setup-Windows.exe">Windows</a></span>
+    <span data-os="linux"><a href="#linux">Linux</a></span>
+  </p>
+
+  <h2>Installation</h2>
+  <ol class="steps">
+    <li><div><b id="step1">Ouvre le fichier téléchargé</b><span id="step1-s">Sur Mac, glisse Echoes dans le dossier Applications, puis lance-le.</span></div></li>
+    <li><div><b>Le tableau de bord s'ouvre</b><span>Echoes s'installe en arrière-plan et démarre avec ta session. Sur ta première machine, il t'affiche un code d'appairage.</span></div></li>
+    <li><div><b>Sur tes autres machines, colle ce code</b><span>Dans la rubrique « Appairage » du tableau de bord. Elles se trouvent ensuite toutes seules sur le réseau local.</span></div></li>
+  </ol>
+
+  <h2>Ce qu'il fait, et ce qu'il ne fait pas</h2>
+  <div class="facts">
+    <div><b>Invisible</b><span>Pas d'icône dans le Dock ni de fenêtre. Le tableau de bord ne s'ouvre que si tu le demandes.</span></div>
+    <div><b>Chez toi seulement</b><span>Tes machines se parlent en direct sur ton réseau, chiffré. Rien ne passe par un serveur.</span></div>
+    <div><b>Toujours à jour</b><span>Les nouvelles versions s'installent seules, quand aucune tâche ne tourne.</span></div>
+  </div>
+
+  <details>
+    <summary>Premier lancement : macOS ou Windows demande une confirmation</summary>
+    <p>Echoes n'est pas encore signé par Apple ni par Microsoft, alors le système demande une confirmation la première fois :</p>
+    <ul>
+      <li><b>macOS</b> : si Echoes refuse de s'ouvrir, va dans Réglages Système &gt; Confidentialité et sécurité, puis « Ouvrir quand même ».</li>
+      <li><b>Windows</b> : sur « Windows a protégé votre ordinateur », clique « Informations complémentaires », puis « Exécuter quand même ».</li>
+    </ul>
+  </details>
+  <details id="linux">
+    <summary>Linux et ligne de commande</summary>
+    <p>Dans un terminal :</p>
+    <p><code>curl -fsSL https://raw.githubusercontent.com/arthurreeb2-tech/Echoes/main/install.sh | sh</code></p>
+    <p>Sur les machines suivantes, ajoute le code : <code>… | sh -s -- &lt;code&gt;</code></p>
+  </details>
+
+  <footer><a href="https://github.com/arthurreeb2-tech/Echoes">Code source</a> · <a href="https://github.com/arthurreeb2-tech/Echoes/releases">Toutes les versions</a></footer>
+</main>
+<script>
+// Un seul bouton : celui du système de la personne qui visite.
+const base = "https://github.com/arthurreeb2-tech/Echoes/releases/latest/download/";
+const ua = navigator.userAgent, plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+const mobile = /iPhone|iPad|Android/i.test(ua);
+let os = null;
+if (/Mac/i.test(plat) || /Macintosh/i.test(ua)) os = "mac";
+else if (/Win/i.test(plat) || /Windows/i.test(ua)) os = "win";
+else if (/Linux/i.test(plat)) os = "linux";
+if (os) { const own = document.querySelector(`.others [data-os="${os}"]`); if (own) own.remove(); }
+const cta = document.getElementById("cta"), label = document.getElementById("cta-label");
+if (mobile) {
+  label.textContent = "Ouvre cette page sur un ordinateur";
+  cta.removeAttribute("href"); cta.setAttribute("aria-disabled", "true"); cta.style.opacity = ".6";
+} else if (os === "mac") {
+  cta.href = base + "Echoes-macOS.dmg"; label.textContent = "Télécharger pour macOS";
+  document.getElementById("meta").textContent = "macOS 11 ou plus récent · Intel et Apple Silicon";
+} else if (os === "win") {
+  cta.href = base + "Echoes-Setup-Windows.exe"; label.textContent = "Télécharger pour Windows";
+  document.getElementById("meta").textContent = "Windows 10 ou 11 · 64 bits";
+  document.getElementById("step1").textContent = "Lance le fichier téléchargé";
+  document.getElementById("step1-s").textContent = "Un double-clic suffit : pas d'assistant à suivre.";
+} else if (os === "linux") {
+  cta.href = "#linux"; label.textContent = "Installer sous Linux";
+  document.getElementById("meta").textContent = "Une commande dans le terminal";
+}
+</script>
+</body>
+</html>
