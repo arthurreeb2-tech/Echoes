@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const DEFAULT_PORT: u16 = 47600;
 pub const SERVICE: &str = "_echoes._tcp.local.";
 
@@ -21,6 +21,7 @@ pub struct Entry {
     pub path: String,
     pub hash: [u8; 32],
     pub mode: u32,
+    pub size: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -35,6 +36,7 @@ pub struct Status {
     /// Nombre de cœurs actuellement libres.
     pub free: f64,
     pub mem_gb: f64,
+    pub version: String,
 }
 
 impl Status {
@@ -49,7 +51,7 @@ pub enum Msg {
     Hello { version: u32 },
     StatusReq,
     Status(Status),
-    Run { project: String, name: String, manifest: Vec<Entry>, command: Vec<String>, pull: Vec<String> },
+    Run { project: String, name: String, manifest: Vec<Entry>, cwd: String, command: Vec<String>, pull: Vec<String> },
     Need(Vec<String>),
     File { path: String, mode: u32, first: bool, last: bool, pulled: bool, data: Vec<u8> },
     FilesDone,

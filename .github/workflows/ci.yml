@@ -1,0 +1,19 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --locked
+      - run: cargo test --locked
+      - name: Compilation Mac Intel
+        if: matrix.os == 'macos-latest'
+        run: rustup target add x86_64-apple-darwin && cargo build --locked --target x86_64-apple-darwin

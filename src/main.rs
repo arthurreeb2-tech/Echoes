@@ -1,9 +1,11 @@
 mod client;
 mod config;
 mod discover;
+mod install;
 mod proto;
 mod status;
 mod sync;
+mod update;
 mod worker;
 
 use anyhow::Result;
@@ -20,6 +22,17 @@ struct Cli {
 enum Cmd {
     /// Crée le code d'appairage (sans argument) ou rejoint les autres machines (avec le code)
     Pair { code: Option<String> },
+    /// Installe Echoes : service au démarrage, mises à jour automatiques, consigne Claude Code.
+    /// Sans code sur la première machine (un code est créé), avec le code sur les suivantes.
+    Install { code: Option<String> },
+    /// Retire le service et le programme (la clé d'appairage est conservée)
+    Uninstall,
+    /// Met Echoes à jour depuis GitHub
+    Update {
+        /// Vérifier seulement, sans installer
+        #[arg(long)]
+        check: bool,
+    },
     /// Prête la puissance de cette machine aux autres
     Serve {
         #[arg(long)]
@@ -61,6 +74,7 @@ fn main() {
 }
 
 fn real_main() -> Result<i32> {
+    update::remember_exe();
     match Cli::parse().cmd {
         Cmd::Pair { code: None } => {
             let key = match config::load_key()? {
@@ -78,6 +92,15 @@ fn real_main() -> Result<i32> {
         Cmd::Pair { code: Some(code) } => {
             config::save_key(&config::parse_key(&code)?)?;
             println!("Machine appairée.");
+            Ok(0)
+        }
+        Cmd::Install { code } => install::run(code).map(|_| 0),
+        Cmd::Uninstall => install::uninstall().map(|_| 0),
+        Cmd::Update { check } => {
+            update::run_cli(check)?;
+            if !check {
+                install::restart_service()?;
+            }
             Ok(0)
         }
         Cmd::Serve { port } => worker::serve(port).map(|_| 0),

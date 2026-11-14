@@ -2,6 +2,7 @@
 
 use crate::proto::{Entry, Msg, Secure, Status};
 use crate::{config, discover, status, sync};
+use std::path::PathBuf;
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
@@ -82,7 +83,7 @@ pub fn list() -> Result<()> {
     let key = config::require_key()?;
     let me = status::local()?;
     let line = |s: &Status, place: &str| {
-        println!("{:<24} {:<18} {:>2} cœurs  {:>4.1} libres  {:>3.0} Go  score {:>6.0}  {}", s.name, format!("{}/{}", s.os, s.arch), s.cores, s.free, s.mem_gb, s.score(), place)
+        println!("{:<22} {:<16} v{:<7} {:>2} cœurs  {:>4.1} libres  {:>3.0} Go  score {:>6.0}  {}", s.name, format!("{}/{}", s.os, s.arch), s.version, s.cores, s.free, s.mem_gb, s.score(), place)
     };
     line(&me, "cette machine");
     let others = find(&key, &me.id, true);
@@ -120,7 +121,8 @@ pub fn run(opts: RunOpts) -> Result<i32> {
             let addr = parse_host(h)?;
             vec![(addr, probe(addr, &key).with_context(|| format!("{h} injoignable"))?)]
         }
-        None => find(&key, &my_id, false),
+        // Mêmes outils, mêmes chemins, mêmes binaires : on ne délègue qu'à une machine du même système.
+        None => find(&key, &my_id, false).into_iter().filter(|(_, s)| s.os == std::env::consts::OS).collect(),
     };
     let me = me.join().map_err(|_| anyhow!("mesure locale impossible"))??;
     let forced = opts.remote || opts.host.is_some();
@@ -135,22 +137,82 @@ pub fn run(opts: RunOpts) -> Result<i32> {
         note(&format!("cette machine est la plus disponible (score {:.0} contre {:.0} pour {}), exécution ici", me.score(), target.score(), target.name));
         return run_local(&opts.command);
     }
-    remote(addr, &target, &key, &opts, &me, note)
+    match remote(addr, &target, &key, &opts, &me, &note)? {
+        Some(code) => Ok(code),
+        None if forced => bail!("{} n'accepte pas de tâche pour l'instant", target.name),
+        None => {
+            note(&format!("{} indisponible pour l'instant, exécution ici", target.name));
+            run_local(&opts.command)
+        }
+    }
 }
 
-fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me: &Status, note: impl Fn(&str)) -> Result<i32> {
-    let root = std::env::current_dir()?;
-    let manifest = sync::scan(&root, &root, false)?;
+/// Dossier à synchroniser : la racine du dépôt git si on est dedans, sinon le dossier courant.
+fn project_root(cwd: &Path) -> PathBuf {
+    let home = dirs::home_dir();
+    cwd.ancestors()
+        .take_while(|d| Some(*d) != home.as_deref())
+        .find(|d| d.join(".git").exists())
+        .unwrap_or(cwd)
+        .to_path_buf()
+}
+
+/// Chemin donné à `--pull` (relatif au dossier courant) → chemin relatif à la racine du projet.
+fn pull_path(root: &Path, cwd: &Path, p: &str) -> Result<String> {
+    let mut out = PathBuf::new();
+    for c in cwd.join(p).components() {
+        match c {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    sync::rel(root, &out).ok_or_else(|| anyhow!("--pull {p} : chemin hors du projet"))
+}
+
+/// Garde-fous : jamais le dossier personnel entier, ni un projet démesuré.
+fn too_big(root: &Path, manifest: &[Entry]) -> Option<String> {
+    if Some(root) == dirs::home_dir().as_deref() || root.parent().is_none() {
+        return Some("le dossier courant est le dossier personnel ou la racine du disque".into());
+    }
+    let size: u64 = manifest.iter().map(|e| e.size).sum();
+    if manifest.len() > 50_000 || size > 4 << 30 {
+        return Some(format!("projet trop volumineux ({} fichiers, {:.1} Go) : ajoute un .echoesignore", manifest.len(), size as f64 / (1u64 << 30) as f64));
+    }
+    None
+}
+
+/// `Ok(None)` : la machine a refusé la tâche avant de la commencer (on peut la faire ici à la place).
+fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me: &Status, note: &impl Fn(&str)) -> Result<Option<i32>> {
+    let cwd = std::env::current_dir()?;
+    let root = project_root(&cwd);
+    let project = blake3::hash(format!("{}:{}", me.id, root.display()).as_bytes()).to_hex()[..12].to_string();
+    let mut cache = sync::HashCache::load(config::data_dir()?.join(format!("cache-{project}")));
+    let manifest = sync::scan(&root, &root, false, &mut cache)?;
+    cache.save();
+    if let Some(reason) = too_big(&root, &manifest) {
+        if opts.remote || opts.host.is_some() {
+            bail!("{reason}");
+        }
+        note(&format!("{reason}, exécution ici"));
+        return run_local(&opts.command).map(Some);
+    }
+    let rel_cwd = sync::rel(&root, &cwd).unwrap_or_default();
+    let pull = opts.pull.iter().map(|p| pull_path(&root, &cwd, p)).collect::<Result<Vec<_>>>()?;
     let by_path: HashMap<&str, &Entry> = manifest.iter().map(|e| (e.path.as_str(), e)).collect();
     let name = root.file_name().and_then(|n| n.to_str()).unwrap_or("projet").to_string();
-    let project = blake3::hash(format!("{}:{}", me.id, root.display()).as_bytes()).to_hex()[..12].to_string();
 
-    let mut conn = connect(addr, key)?;
+    let Ok(mut conn) = connect(addr, key) else { return Ok(None) };
     conn.stream().set_read_timeout(Some(Duration::from_secs(120)))?;
-    conn.send(&Msg::Run { project, name, manifest: manifest.clone(), command: opts.command.clone(), pull: opts.pull.clone() })?;
+    conn.send(&Msg::Run { project, name, manifest: manifest.clone(), cwd: rel_cwd, command: opts.command.clone(), pull })?;
     let need = match conn.recv()? {
         Msg::Need(n) => n,
-        Msg::Error(e) => bail!("{} : {e}", target.name),
+        Msg::Error(e) => {
+            note(&format!("{} : {e}", target.name));
+            return Ok(None);
+        }
         _ => bail!("réponse inattendue"),
     };
     note(&format!("→ {} ({}/{}, {:.1} cœurs libres), {} fichier(s) à envoyer sur {}", target.name, target.os, target.arch, target.free, need.len(), manifest.len()));
@@ -173,7 +235,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
             Msg::Output { err: true, data } => std::io::stderr().write_all(&data)?,
             Msg::Ping | Msg::FilesDone => {}
             Msg::File { path, mode, first, last, pulled, data } => {
-                let dest = sync::resolve(&root, &path)?;
+                let dest = sync::resolve_file(&root, &path)?;
                 if first {
                     let keep = pulled || safe_to_write(&dest, by_path.get(path.as_str()).copied());
                     if keep {
@@ -193,7 +255,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
                 for p in skipped {
                     eprintln!("echoes: {p} a changé ici pendant l'exécution, version distante ignorée");
                 }
-                return Ok(code);
+                return Ok(Some(code));
             }
             Msg::Error(e) => bail!("{} : {e}", target.name),
             _ => bail!("message inattendu"),

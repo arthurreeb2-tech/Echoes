@@ -1,6 +1,6 @@
 [package]
 name = "echoes"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Lance une commande ici, elle tourne sur la machine la plus disponible de ton réseau."
 
@@ -14,8 +14,11 @@ hex = "0.4"
 ignore = "0.4"
 mdns-sd = "0.21"
 rand = "0.9"
+self-replace = "1"
 serde = { version = "1", features = ["derive"] }
-snow = "0.10"
+serde_json = "1"
+sha2 = "0.10"
+snow = { version = "0.10", default-features = false, features = ["default-resolver-crypto"] }
 sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 
 [target.'cfg(unix)'.dependencies]

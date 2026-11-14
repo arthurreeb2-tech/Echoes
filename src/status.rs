@@ -47,6 +47,7 @@ fn fixed() -> Result<Status> {
         bench: bench(),
         free: 0.0,
         mem_gb: sys.total_memory() as f64 / (1u64 << 30) as f64,
+        version: env!("CARGO_PKG_VERSION").into(),
     })
 }
 
