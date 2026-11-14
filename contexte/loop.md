@@ -11,3 +11,9 @@
 | 1 (3b-C) | Serveur HTTP : un thread par connexion sans limite, délai par lecture et non par requête, boucle CPU si `accept` échoue | GRAVE | à traiter | ouvert |
 | 1 (3b-C) | Page publique : boutons vers des fichiers absents tant qu'aucune version n'est publiée | GRAVE | à traiter | ouvert |
 | 1 (3b-C) | Fichiers secrets créés lisibles puis chmod (fenêtre) ; comparaison du jeton non constante ; erreurs API sans réponse ni message ; message « redémarre » faux et clé remplacée sans confirmation ; totaux plafonnés sans le dire ; gain compté sur les échecs ; NaN si 0 cœur ; écritures non atomiques ; historique non protégé ; détection iPad/Linux ; promesses inexactes de la page | MINEUR | à traiter | ouvert |
+| 1 (3b-B) | `fs::copy` peut propager la quarantaine (xattr) vers ~/.local/bin/echoes → service bloqué par Gatekeeper (incertain) | GRAVE | à traiter | ouvert |
+| 1 (3b-B) | Mise à jour sans test de démarrage ni retour arrière : une version cassée immobilise toutes les machines | GRAVE | à traiter | ouvert |
+| 1 (3b-B) | `launchctl bootstrap gui/UID` échoue sans session graphique (installation SSH du Mac mini) ; agent arrêté hors session | GRAVE | à traiter | ouvert |
+| 1 (3b-B) | Accès au réseau local macOS 15+ pour un agent launchd non signé (incertain) | GRAVE | à vérifier sur Mac | ouvert |
+| 1 (3b-B) | install.ps1 : `.Content` en octets → vérification SHA-256 toujours en échec | GRAVE | à traiter | ouvert |
+| 1 (3b-B) | DMG plus récent ignoré si déjà installé ; repli `.profile` sur macOS ; serveur de tableau de bord orphelin invisible ; aucun retour si le service tarde ; ordre stop/start dans install ; Gatekeeper « endommagé » non documenté ; journal sans rotation ; CI sans clippy/audit ; tranche Intel jamais exécutée ; e2e bloquant la publication | MINEUR | à traiter | ouvert |
