@@ -57,7 +57,7 @@ pub fn summarize(me: Option<&Status>, known: &[Machine], peers_online: &[Status]
     if let Some(me) = me {
         machines.push(Row { label: format!("{} (cette machine) — {}", me.name, state_label(me)), online: true });
     }
-    let mut peers: Vec<&Status> = peers_online.iter().filter(|p| me.map_or(true, |m| m.id != p.id)).collect();
+    let mut peers: Vec<&Status> = peers_online.iter().filter(|p| me.is_none_or(|m| m.id != p.id)).collect();
     peers.sort_by(|a, b| b.score().total_cmp(&a.score()));
     for p in &peers {
         machines.push(Row { label: format!("{} — {}", p.name, state_label(p)), online: true });
