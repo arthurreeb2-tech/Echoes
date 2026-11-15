@@ -3,10 +3,15 @@ mod config;
 mod dashboard;
 mod discover;
 mod history;
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+mod icon;
 mod install;
 mod proto;
 mod status;
 mod sync;
+// Sous Linux, l'icône n'existe pas : son modèle n'y est utilisé que par les tests.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+mod tray;
 mod update;
 mod worker;
 
@@ -70,6 +75,16 @@ enum Cmd {
         #[arg(trailing_var_arg = true, required = true)]
         command: Vec<String>,
     },
+    /// Icône Echoes dans la barre des menus (lancée à l'ouverture de session)
+    #[command(hide = true)]
+    Tray {
+        /// Crée le démarrage automatique de l'icône s'il manque, la lance, puis rend la main
+        #[arg(long)]
+        ensure: bool,
+    },
+    /// Écrit le jeu d'images de l'icône d'app (`Echoes.iconset`), pour `iconutil`.
+    #[command(hide = true)]
+    Icon { dir: std::path::PathBuf },
 }
 
 fn main() {
@@ -94,9 +109,12 @@ fn real_main() -> Result<i32> {
             let installed = install::bin_path()?;
             let me = std::env::current_exe()?;
             if std::fs::canonicalize(&me).ok() != std::fs::canonicalize(&installed).ok() {
+                // Machines installées avant l'icône : lancer l'app l'ajoute (et la rouvre après « Quitter »).
+                let _ = std::process::Command::new(&installed).args(["tray", "--ensure"]).status();
                 let status = std::process::Command::new(installed).arg("dashboard").status()?;
                 return Ok(status.code().unwrap_or(1));
             }
+            let _ = install::ensure_tray();
             dashboard::open(false)?;
         } else {
             install::run(None, true)?;
@@ -129,11 +147,17 @@ fn real_main() -> Result<i32> {
             update::run_cli(check)?;
             if !check {
                 install::restart_service()?;
+                install::restart_tray_if_running();
             }
             Ok(0)
         }
         Cmd::Serve { port } => worker::serve(port).map(|_| 0),
         Cmd::Ls => client::list().map(|_| 0),
+        // Pas de passage à la copie installée : macOS attache l'autorisation « réseau local » au programme
+        // de `Echoes.app`, et la perd après un `exec` vers un autre programme (constaté sur macOS 15).
+        Cmd::Tray { ensure: false } => tray::run(),
+        Cmd::Tray { ensure: true } => install::ensure_tray().map(|_| 0),
+        Cmd::Icon { dir } => icon::write_iconset(&dir).map(|_| 0),
         Cmd::Run { host, local, remote, pull, quiet, command } => client::run(client::RunOpts { host, local, remote, pull, quiet, command }),
     }
 }

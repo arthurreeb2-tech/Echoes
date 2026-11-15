@@ -41,6 +41,11 @@ fn probe(addr: SocketAddr, key: &[u8; 32]) -> Result<Status> {
     }
 }
 
+/// Le service `echoes serve` de cette machine répond-il ?
+pub fn service_up(key: &[u8; 32]) -> bool {
+    probe(SocketAddr::from(([127, 0, 0, 1], crate::proto::DEFAULT_PORT)), key).is_ok()
+}
+
 pub fn fetch_history(addr: SocketAddr, key: &[u8; 32]) -> Vec<Record> {
     let Ok(mut conn) = connect(addr, key) else { return vec![] };
     if conn.send(&Msg::HistoryReq).is_err() {
@@ -74,6 +79,20 @@ fn parse_host(s: &str) -> Result<SocketAddr> {
     let s = s.trim();
     let full = if s.contains(':') { s.to_string() } else { format!("{s}:{}", crate::proto::DEFAULT_PORT) };
     full.to_socket_addrs()?.next().ok_or_else(|| anyhow!("machine introuvable : {s}"))
+}
+
+/// Sonde une liste d'adresses, sans recherche Bonjour ni écriture du cache (icône de la barre des menus).
+pub fn probe_addrs(addrs: &[SocketAddr], key: &[u8; 32], me: &str) -> Vec<(SocketAddr, Status)> {
+    let mut found = probe_all(addrs, key, me);
+    found.sort_by(|a, b| b.1.score().total_cmp(&a.1.score()));
+    found
+}
+
+/// Adresses connues : `ECHOES_HOSTS` et cache des dernières machines vues.
+pub fn known_addrs() -> Vec<SocketAddr> {
+    let mut known = static_hosts();
+    known.extend(config::load_peers());
+    known
 }
 
 /// Machines joignables. `fresh` force une recherche réseau au lieu des dernières machines connues.

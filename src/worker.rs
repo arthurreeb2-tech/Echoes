@@ -98,6 +98,7 @@ fn auto_update() {
                     match update::install(&release) {
                         Ok(()) => {
                             eprintln!("echoes: mise à jour vers {} installée, redémarrage", release.version);
+                            crate::install::restart_tray_if_running();
                             update::restart();
                         }
                         Err(e) => eprintln!("echoes: mise à jour impossible : {e:#}"),

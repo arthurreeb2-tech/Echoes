@@ -24,6 +24,11 @@ sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Icône de la barre des menus (macOS) et de la zone de notification (Windows) : `echoes tray`.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+tray-icon = "0.26"
+tao = { version = "0.37", default-features = false }
+
 [profile.release]
 opt-level = 3
 lto = "thin"

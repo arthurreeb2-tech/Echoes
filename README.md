@@ -52,16 +52,28 @@ L'installation :
 
 À savoir sur Mac :
 
-- macOS signale un nouvel « élément d'ouverture » à l'installation : c'est le service d'Echoes. Le désactiver dans Réglages Système > Général > Ouverture arrête Echoes.
+- macOS signale de nouveaux « éléments d'ouverture » à l'installation : le service d'Echoes et son icône de barre des menus. Désactiver le service dans Réglages Système > Général > Ouverture arrête Echoes ; désactiver l'icône ne retire que l'icône.
 - Le service ne tourne que lorsqu'une session est ouverte. Sur un Mac sans écran (Mac mini), active l'ouverture de session automatique pour qu'il reprenne après un redémarrage.
 - Si macOS demande d'autoriser Echoes à accéder au réseau local ou à recevoir des connexions, accepte : sans cela les machines ne se voient pas.
 - Si macOS dit l'app « endommagée » : `xattr -dr com.apple.quarantine /Applications/Echoes.app`.
 
 `echoes uninstall` retire le tout (la clé d'appairage est conservée ; sur Mac, mets aussi `Echoes.app` à la corbeille).
 
+## Icône de la barre des menus
+
+Sur Mac (barre des menus) et sous Windows (zone de notification), une icône Echoes reste visible en permanence. Sa pastille résume l'état :
+
+- **verte** : au moins une autre machine est en ligne et libre ;
+- **orange** : aucune autre machine libre (toutes occupées, ou aucune en ligne) ;
+- **grise** : le service de cette machine ne répond pas, ou elle n'est pas encore appairée.
+
+Un clic ouvre un menu : les machines et leur état (« libre · 7,8 cœurs », « occupée », « hors ligne »), les tâches déléguées sur 24 heures, « Ouvrir le tableau de bord » et « Quitter ». Elle se met à jour toutes les 15 secondes.
+
+« Quitter » la ferme jusqu'à la prochaine ouverture de session ; relancer l'app « Echoes » la fait revenir. Sur un Mac déjà installé avant l'icône, ouvrir une fois l'app « Echoes » l'ajoute. Au premier lancement, macOS demande d'autoriser Echoes à rechercher des appareils sur le réseau local : accepte, sinon l'icône ne voit aucune autre machine. Cette autorisation n'existe que pour l'app : installé seulement en ligne de commande (sans `Echoes.app` dans Applications), Echoes affiche l'icône mais elle ne voit pas les autres machines. Sous Linux, pas d'icône.
+
 ## Tableau de bord
 
-Echoes ne montre rien tant qu'on ne le demande pas. `echoes dashboard`, l'app « Echoes » sur Mac ou le raccourci du menu Démarrer ouvrent une page locale qui affiche :
+`echoes dashboard`, l'app « Echoes » sur Mac, l'icône de la barre des menus ou le raccourci du menu Démarrer ouvrent une page locale qui affiche :
 
 - les tâches déléguées, le temps gagné (estimé), le calcul fait ailleurs et les données envoyées, sur 24 h, 7 jours, 30 jours ou depuis le début ;
 - les machines du réseau, leur charge en direct, leur puissance et leur version (celles hors ligne restent affichées, grisées) ;

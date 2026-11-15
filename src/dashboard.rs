@@ -317,17 +317,17 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<()> {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct Machine {
-    status: Status,
-    online: bool,
-    me: bool,
-    last_seen: u64,
+pub(crate) struct Machine {
+    pub(crate) status: Status,
+    pub(crate) online: bool,
+    pub(crate) me: bool,
+    pub(crate) last_seen: u64,
     /// Puissance qu'on peut lui demander maintenant (même calcul que pour choisir où envoyer une tâche).
     #[serde(default)]
-    score: f64,
+    pub(crate) score: f64,
     /// Prise par un travail lourd : Echoes lui envoie moins de tâches et les bride.
     #[serde(default)]
-    busy: bool,
+    pub(crate) busy: bool,
 }
 
 #[derive(Serialize)]
