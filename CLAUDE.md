@@ -13,7 +13,7 @@ Installer Echoes sur la machine où tourne cette session, sans poser de question
    - puis `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y` et `. "$HOME/.cargo/env"`.
 4. **Vérifier** :
    - `~/.local/bin/echoes ls` liste la machine (et les autres déjà installées) ;
-   - macOS : `launchctl print gui/$(id -u)/io.echoes.serve | grep state` doit indiquer `running` ; journal dans `~/Library/Logs/echoes.log` ;
+   - macOS : `launchctl print gui/$(id -u)/io.echoes.serve | grep state` doit indiquer `running` ; journal dans `~/Library/Logs/echoes.log` ; l'icône : `launchctl print gui/$(id -u)/io.echoes.tray | grep state`, journal `~/Library/Logs/echoes-tray.log` (une ligne par changement d'état) ;
    - Linux : `systemctl --user status echoes`.
 5. **Ouvrir le tableau de bord** si l'utilisateur est devant la machine : `~/.local/bin/echoes dashboard`.
 6. **Rendre compte** en quelques lignes : installé ou non, le code d'appairage s'il vient d'être créé (secret, à garder pour les autres machines), et les éventuelles validations à faire à la main (pare-feu, accès au réseau local).
@@ -51,5 +51,6 @@ Ne jamais affaiblir la sécurité : clé d'appairage, chiffrement Noise, refus d
 - `src/install.rs` : installation (launchd, systemd, tâche planifiée Windows), PATH, consigne globale Claude Code.
 - `src/update.rs` : mise à jour depuis les versions GitHub.
 - `src/history.rs` : journal des tâches. `src/dashboard.rs` + `src/dashboard.html` : tableau de bord local (127.0.0.1:47601, billet à usage unique après `#` échangé contre une session, preuve d'identité du serveur, contrôle de l'en-tête Host).
+- `src/tray/` : icône de la barre des menus (`echoes tray`, cachée) ; `model.rs` décide couleur, info-bulle et menu (logique pure, testée), `mod.rs` l'affiche (tray-icon + tao, macOS et Windows seulement). Sur Mac elle est lancée à travers `Echoes.app` (agent `io.echoes.tray`), seule façon d'obtenir l'accès au réseau local de macOS, puis l'app passe la main par `exec` à la copie installée. `src/icon.rs` : dessin des icônes (ondes concentriques) sans fichier image ; `echoes icon <dossier>` (caché) régénère l'iconset de `packaging/macos/Echoes.icns`.
 - `packaging/macos/` : app `Echoes.app` (sans icône dans le Dock) dans une image disque `.dmg` à glisser dans Applications ; au premier lancement, l'app s'installe et ouvre le tableau de bord. `docs/index.html` : page de téléchargement (GitHub Pages, `.github/workflows/pages.yml`). Sous Windows, l'installateur est le programme lui-même : lancé sans argument, il s'installe puis ouvre le tableau de bord.
 - `tests/e2e.rs` : deux « machines » sur la même, de bout en bout.
