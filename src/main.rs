@@ -3,6 +3,8 @@ mod config;
 mod dashboard;
 mod discover;
 mod history;
+#[allow(dead_code)] // Retiré quand `echoes tray` utilise les couleurs (tâche 3).
+mod icon;
 mod install;
 mod proto;
 mod status;
@@ -72,6 +74,9 @@ enum Cmd {
         #[arg(trailing_var_arg = true, required = true)]
         command: Vec<String>,
     },
+    /// Écrit le jeu d'images de l'icône d'app (`Echoes.iconset`), pour `iconutil`.
+    #[command(hide = true)]
+    Icon { dir: std::path::PathBuf },
 }
 
 fn main() {
@@ -136,6 +141,7 @@ fn real_main() -> Result<i32> {
         }
         Cmd::Serve { port } => worker::serve(port).map(|_| 0),
         Cmd::Ls => client::list().map(|_| 0),
+        Cmd::Icon { dir } => icon::write_iconset(&dir).map(|_| 0),
         Cmd::Run { host, local, remote, pull, quiet, command } => client::run(client::RunOpts { host, local, remote, pull, quiet, command }),
     }
 }
