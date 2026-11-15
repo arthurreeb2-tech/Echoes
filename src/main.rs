@@ -3,13 +3,14 @@ mod config;
 mod dashboard;
 mod discover;
 mod history;
-#[allow(dead_code)] // Retiré quand `echoes tray` utilise les couleurs (tâche 3).
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 mod icon;
 mod install;
 mod proto;
 mod status;
 mod sync;
-#[allow(dead_code)] // Retiré quand `echoes tray` utilise le modèle (tâche 3).
+// Sous Linux, l'icône n'existe pas : son modèle n'y est utilisé que par les tests.
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
 mod tray;
 mod update;
 mod worker;
@@ -73,6 +74,13 @@ enum Cmd {
         quiet: bool,
         #[arg(trailing_var_arg = true, required = true)]
         command: Vec<String>,
+    },
+    /// Icône Echoes dans la barre des menus (lancée à l'ouverture de session)
+    #[command(hide = true)]
+    Tray {
+        /// Crée le démarrage automatique de l'icône s'il manque, la lance, puis rend la main
+        #[arg(long)]
+        ensure: bool,
     },
     /// Écrit le jeu d'images de l'icône d'app (`Echoes.iconset`), pour `iconutil`.
     #[command(hide = true)]
@@ -141,6 +149,8 @@ fn real_main() -> Result<i32> {
         }
         Cmd::Serve { port } => worker::serve(port).map(|_| 0),
         Cmd::Ls => client::list().map(|_| 0),
+        Cmd::Tray { ensure: false } => tray::run(),
+        Cmd::Tray { ensure: true } => anyhow::bail!("non implémenté"),
         Cmd::Icon { dir } => icon::write_iconset(&dir).map(|_| 0),
         Cmd::Run { host, local, remote, pull, quiet, command } => client::run(client::RunOpts { host, local, remote, pull, quiet, command }),
     }

@@ -41,6 +41,11 @@ fn probe(addr: SocketAddr, key: &[u8; 32]) -> Result<Status> {
     }
 }
 
+/// Le service `echoes serve` de cette machine répond-il ?
+pub fn service_up(key: &[u8; 32]) -> bool {
+    probe(SocketAddr::from(([127, 0, 0, 1], crate::proto::DEFAULT_PORT)), key).is_ok()
+}
+
 pub fn fetch_history(addr: SocketAddr, key: &[u8; 32]) -> Vec<Record> {
     let Ok(mut conn) = connect(addr, key) else { return vec![] };
     if conn.send(&Msg::HistoryReq).is_err() {
