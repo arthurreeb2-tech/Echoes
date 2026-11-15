@@ -1,6 +1,6 @@
 [package]
 name = "echoes"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 description = "Lance une commande ici, elle tourne sur la machine la plus disponible de ton réseau."
 
