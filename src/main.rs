@@ -7,6 +7,8 @@ mod install;
 mod proto;
 mod status;
 mod sync;
+#[allow(dead_code)] // Retiré quand `echoes tray` utilise le modèle (tâche 3).
+mod tray;
 mod update;
 mod worker;
 
