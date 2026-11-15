@@ -69,7 +69,7 @@ Sur Mac (barre des menus) et sous Windows (zone de notification), une icône Ech
 
 Un clic ouvre un menu : les machines et leur état (« libre · 7,8 cœurs », « occupée », « hors ligne »), les tâches déléguées sur 24 heures, « Ouvrir le tableau de bord » et « Quitter ». Elle se met à jour toutes les 15 secondes.
 
-« Quitter » la ferme jusqu'à la prochaine ouverture de session ; relancer l'app « Echoes » la fait revenir. Sur un Mac déjà installé avant l'icône, ouvrir une fois l'app « Echoes » l'ajoute. Au premier lancement, macOS demande d'autoriser Echoes à rechercher des appareils sur le réseau local : accepte, sinon l'icône ne voit aucune autre machine. Sous Linux, pas d'icône.
+« Quitter » la ferme jusqu'à la prochaine ouverture de session ; relancer l'app « Echoes » la fait revenir. Sur un Mac déjà installé avant l'icône, ouvrir une fois l'app « Echoes » l'ajoute. Au premier lancement, macOS demande d'autoriser Echoes à rechercher des appareils sur le réseau local : accepte, sinon l'icône ne voit aucune autre machine. Cette autorisation n'existe que pour l'app : installé seulement en ligne de commande (sans `Echoes.app` dans Applications), Echoes affiche l'icône mais elle ne voit pas les autres machines. Sous Linux, pas d'icône.
 
 ## Tableau de bord
 

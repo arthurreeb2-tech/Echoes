@@ -81,6 +81,20 @@ fn parse_host(s: &str) -> Result<SocketAddr> {
     full.to_socket_addrs()?.next().ok_or_else(|| anyhow!("machine introuvable : {s}"))
 }
 
+/// Sonde une liste d'adresses, sans recherche Bonjour ni écriture du cache (icône de la barre des menus).
+pub fn probe_addrs(addrs: &[SocketAddr], key: &[u8; 32], me: &str) -> Vec<(SocketAddr, Status)> {
+    let mut found = probe_all(addrs, key, me);
+    found.sort_by(|a, b| b.1.score().total_cmp(&a.1.score()));
+    found
+}
+
+/// Adresses connues : `ECHOES_HOSTS` et cache des dernières machines vues.
+pub fn known_addrs() -> Vec<SocketAddr> {
+    let mut known = static_hosts();
+    known.extend(config::load_peers());
+    known
+}
+
 /// Machines joignables. `fresh` force une recherche réseau au lieu des dernières machines connues.
 pub fn find(key: &[u8; 32], me: &str, fresh: bool) -> Vec<(SocketAddr, Status)> {
     let mut known = static_hosts();

@@ -62,6 +62,9 @@ pub fn run(code: Option<String>, open: bool) -> Result<()> {
 
     // 2. Programme à un emplacement stable (celui que le service lance et que les mises à jour remplacent).
     stop_service();
+    // Sous Windows, l'icône en cours d'exécution verrouille le programme : on l'arrête, `ensure_tray` la relance.
+    #[cfg(windows)]
+    remove_tray_process();
     let dest = bin_path()?;
     fs::create_dir_all(dest.parent().unwrap())?;
     let me = std::env::current_exe()?;
@@ -304,7 +307,7 @@ fn start_service(bin: &Path) -> Result<bool> {
 fn stop_service() {
     let _ = quiet(Command::new("schtasks").args(["/End", "/TN", "Echoes"]));
     // Seulement le service : l'icône (`echoes tray`) continue de tourner.
-    let _ = quiet(Command::new("powershell").args(["-NoProfile", "-Command", &serve_kill_filter(std::process::id())]));
+    let _ = quiet(Command::new("powershell").args(["-NoProfile", "-Command", &kill_filter(std::process::id(), "serve")]));
 }
 
 #[cfg(windows)]
@@ -321,11 +324,11 @@ fn firewall_hint() {
     println!("Si le pare-feu Windows demande d'autoriser « echoes » sur les réseaux privés, accepte.");
 }
 
-/// Commande PowerShell qui arrête les processus `echoes.exe … serve`, sauf `except_pid`.
+/// Commande PowerShell qui arrête les processus `echoes.exe … <sub>` (`serve` ou `tray`), sauf `except_pid`.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn serve_kill_filter(except_pid: u32) -> String {
+fn kill_filter(except_pid: u32, sub: &str) -> String {
     format!(
-        "Get-CimInstance Win32_Process -Filter \"Name='echoes.exe'\" | Where-Object {{ $_.ProcessId -ne {except_pid} -and $_.CommandLine -and $_.CommandLine.TrimEnd().EndsWith(' serve') }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+        "Get-CimInstance Win32_Process -Filter \"Name='echoes.exe'\" | Where-Object {{ $_.ProcessId -ne {except_pid} -and $_.CommandLine -and $_.CommandLine.TrimEnd().EndsWith(' {sub}') }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
     )
 }
 
@@ -467,17 +470,24 @@ pub fn ensure_tray() -> Result<()> {
     Ok(())
 }
 
+/// Arrête l'icône : la tâche planifiée, puis le programme lui-même (`schtasks /End` n'arrête que `conhost`).
+#[cfg(windows)]
+fn remove_tray_process() {
+    quiet(Command::new("schtasks").args(["/End", "/TN", TRAY_TASK]));
+    quiet(Command::new("powershell").args(["-NoProfile", "-Command", &kill_filter(std::process::id(), "tray")]));
+}
+
 #[cfg(windows)]
 pub fn restart_tray_if_running() {
     if tray_task_state().as_deref() == Some("Running") {
-        quiet(Command::new("schtasks").args(["/End", "/TN", TRAY_TASK]));
+        remove_tray_process();
         quiet(Command::new("schtasks").args(["/Run", "/TN", TRAY_TASK]));
     }
 }
 
 #[cfg(windows)]
 fn remove_tray() {
-    quiet(Command::new("schtasks").args(["/End", "/TN", TRAY_TASK]));
+    remove_tray_process();
     quiet(Command::new("schtasks").args(["/Delete", "/F", "/TN", TRAY_TASK]));
 }
 
@@ -588,9 +598,15 @@ mod tests {
 
     #[test]
     fn serve_kill_filter_spares_tray() {
-        let f = serve_kill_filter(4242);
+        let f = kill_filter(4242, "serve");
         assert!(f.contains("' serve'"), "ne vise que les processus `serve` : {f}");
         assert!(f.contains("4242"), "épargne le processus courant : {f}");
         assert!(!f.contains("/IM echoes.exe"));
+    }
+
+    #[test]
+    fn tray_kill_filter_targets_tray_only() {
+        let f = kill_filter(7, "tray");
+        assert!(f.contains("' tray'") && !f.contains("' serve'"), "{f}");
     }
 }

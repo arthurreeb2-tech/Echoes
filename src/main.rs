@@ -147,6 +147,7 @@ fn real_main() -> Result<i32> {
             update::run_cli(check)?;
             if !check {
                 install::restart_service()?;
+                install::restart_tray_if_running();
             }
             Ok(0)
         }

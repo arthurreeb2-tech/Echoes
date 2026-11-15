@@ -4,9 +4,19 @@ pub mod model;
 
 use anyhow::Result;
 
+/// Mémoire du fil de rafraîchissement : adresses déjà trouvées par Bonjour et date de la dernière recherche.
+/// L'icône n'écrit jamais le cache `peers` de `echoes run` et ne lance Bonjour que rarement (`model::should_browse`).
+#[derive(Default)]
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+struct Scan {
+    seen: Vec<std::net::SocketAddr>,
+    last_browse: Option<std::time::Instant>,
+}
+
 /// Mesure l'état du réseau, sans interface : appelé toutes les 15 s par le fil de rafraîchissement.
-fn snapshot() -> model::Summary {
-    use crate::{client, config, dashboard::Machine, history, status};
+#[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+fn snapshot(scan: &mut Scan) -> model::Summary {
+    use crate::{client, config, dashboard::Machine, discover, history, status};
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let me = status::local().ok();
     let key = config::load_key().ok().flatten();
@@ -15,10 +25,29 @@ fn snapshot() -> model::Summary {
         .and_then(|d| std::fs::read(d.join("machines.json")).ok())
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
-    let (peers, up) = match (&key, &me) {
-        (Some(k), Some(m)) => (client::find(k, &m.id, false).into_iter().map(|(_, s)| s).collect(), client::service_up(k)),
-        (Some(k), None) => (vec![], client::service_up(k)),
-        (None, _) => (vec![], false),
+    let (peers, up) = match &key {
+        Some(k) => {
+            let my_id = me.as_ref().map(|m| m.id.clone()).unwrap_or_default();
+            let mut addrs = client::known_addrs();
+            addrs.extend(scan.seen.iter().copied());
+            addrs.sort();
+            addrs.dedup();
+            let mut found = client::probe_addrs(&addrs, k, &my_id);
+            if model::should_browse(!found.is_empty(), scan.last_browse.map(|t| t.elapsed())) {
+                scan.last_browse = Some(std::time::Instant::now());
+                for a in discover::browse(std::time::Duration::from_millis(800)) {
+                    if !scan.seen.contains(&a) {
+                        scan.seen.push(a);
+                    }
+                }
+                addrs.extend(scan.seen.iter().copied());
+                addrs.sort();
+                addrs.dedup();
+                found = client::probe_addrs(&addrs, k, &my_id);
+            }
+            (found.into_iter().map(|(_, s)| s).collect(), client::service_up(k))
+        }
+        None => (vec![], false),
     };
     model::summarize(me.as_ref(), &known, &peers, &history::read(2000), up, key.is_some(), now)
 }
@@ -87,11 +116,14 @@ pub fn run() -> Result<i32> {
         let _ = proxy.send_event(UserEvent::Menu(e));
     }));
     let proxy = event_loop.create_proxy();
-    std::thread::spawn(move || loop {
-        if proxy.send_event(UserEvent::Refresh(Box::new(snapshot()))).is_err() {
-            return;
+    std::thread::spawn(move || {
+        let mut scan = Scan::default();
+        loop {
+            if proxy.send_event(UserEvent::Refresh(Box::new(snapshot(&mut scan)))).is_err() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(15));
         }
-        std::thread::sleep(std::time::Duration::from_secs(15));
     });
 
     let icon_for = |light: model::Light| {
@@ -126,7 +158,7 @@ pub fn run() -> Result<i32> {
     };
 
     let mut tray: Option<TrayIcon> = None;
-    let mut last_tooltip: Option<String> = None;
+    let mut shown: Option<model::Summary> = None;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -146,16 +178,21 @@ pub fn run() -> Result<i32> {
                 }
             }
             Event::UserEvent(UserEvent::Refresh(s)) => {
+                if !model::menu_changed(shown.as_ref(), &s) {
+                    return;
+                }
                 // Journal (~/Library/Logs/echoes-tray.log) : une ligne à chaque changement d'état.
-                if last_tooltip.as_deref() != Some(s.tooltip.as_str()) {
+                if shown.as_ref().map(|p| &p.tooltip) != Some(&s.tooltip) {
                     eprintln!("echoes: icône {:?} : {}", s.light, s.tooltip);
-                    last_tooltip = Some(s.tooltip.clone());
                 }
                 if let Some(t) = &tray {
-                    let _ = t.set_icon(icon_for(s.light));
+                    if shown.as_ref().map(|p| p.light) != Some(s.light) {
+                        let _ = t.set_icon(icon_for(s.light));
+                    }
                     let _ = t.set_tooltip(Some(&s.tooltip));
                     t.set_menu(Some(Box::new(build_menu(Some(&s)))));
                 }
+                shown = Some(*s);
             }
             Event::UserEvent(UserEvent::Menu(e)) if e.id == open_id => open_dashboard(),
             Event::UserEvent(UserEvent::Menu(e)) if e.id == quit_id => {

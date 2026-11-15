@@ -13,7 +13,7 @@ Installer Echoes sur la machine où tourne cette session, sans poser de question
    - puis `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y` et `. "$HOME/.cargo/env"`.
 4. **Vérifier** :
    - `~/.local/bin/echoes ls` liste la machine (et les autres déjà installées) ;
-   - macOS : `launchctl print gui/$(id -u)/io.echoes.serve | grep state` doit indiquer `running` ; journal dans `~/Library/Logs/echoes.log` ; l'icône : `launchctl print gui/$(id -u)/io.echoes.tray | grep state`, journal `~/Library/Logs/echoes-tray.log` (une ligne par changement d'état) ;
+   - macOS : `launchctl print gui/$(id -u)/io.echoes.serve | grep state` doit indiquer `running` ; journal dans `~/Library/Logs/echoes.log` ; l'icône : `launchctl print gui/$(id -u)/io.echoes.tray | grep state`, journal `~/Library/Logs/echoes-tray.log` (une ligne par changement d'état) : « Orange : aucune autre machine libre » alors que `echoes ls` voit une machine libre signifie que l'accès au réseau local n'est pas accordé à `Echoes.app` (Réglages Système > Confidentialité et sécurité > Réseau local) ;
    - Linux : `systemctl --user status echoes`.
 5. **Ouvrir le tableau de bord** si l'utilisateur est devant la machine : `~/.local/bin/echoes dashboard`.
 6. **Rendre compte** en quelques lignes : installé ou non, le code d'appairage s'il vient d'être créé (secret, à garder pour les autres machines), et les éventuelles validations à faire à la main (pare-feu, accès au réseau local).

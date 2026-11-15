@@ -86,6 +86,20 @@ pub fn summarize(me: Option<&Status>, known: &[Machine], peers_online: &[Status]
     Summary { light, tooltip, machines, activity: activity(records, now) }
 }
 
+/// Faut-il relancer une recherche Bonjour ? Au premier rafraîchissement, puis toutes les 2 minutes
+/// tant qu'aucune autre machine ne répond, toutes les 10 minutes sinon : jamais toutes les 15 s.
+pub fn should_browse(found_any: bool, since_last: Option<std::time::Duration>) -> bool {
+    match since_last {
+        None => true,
+        Some(d) => d.as_secs() >= if found_any { 600 } else { 120 },
+    }
+}
+
+/// Reconstruire le menu le refermerait s'il est ouvert : seulement quand son contenu change.
+pub fn menu_changed(prev: Option<&Summary>, new: &Summary) -> bool {
+    prev != Some(new)
+}
+
 fn activity(records: &[Record], now: u64) -> String {
     let recent: Vec<&Record> = records.iter().filter(|r| r.remote && r.ts >= now.saturating_sub(86_400)).collect();
     if recent.is_empty() {
@@ -109,6 +123,7 @@ mod tests {
     use crate::dashboard::Machine;
     use crate::history::Record;
     use crate::proto::Status;
+    use std::time::Duration;
 
     fn status(id: &str, name: &str, free: f64, gpu: Option<f32>, mem_free: f64) -> Status {
         Status {
@@ -189,6 +204,34 @@ mod tests {
         assert!(row.label.ends_with("hors ligne"));
         assert!(!row.online);
         assert_eq!(s.machines.len(), 2, "cette machine n'est pas répétée comme hors ligne");
+    }
+
+    #[test]
+    fn first_refresh_browses() {
+        assert!(should_browse(false, None));
+    }
+
+    #[test]
+    fn no_peer_browses_every_two_minutes() {
+        assert!(!should_browse(false, Some(Duration::from_secs(119))));
+        assert!(should_browse(false, Some(Duration::from_secs(120))));
+    }
+
+    #[test]
+    fn peers_found_browse_every_ten_minutes() {
+        assert!(!should_browse(true, Some(Duration::from_secs(599))));
+        assert!(should_browse(true, Some(Duration::from_secs(600))));
+    }
+
+    #[test]
+    fn unchanged_summary_keeps_open_menu() {
+        let me = imac();
+        let a = summarize(Some(&me), &[], &[], &[], true, true, NOW);
+        assert!(!menu_changed(Some(&a), &a.clone()));
+        assert!(menu_changed(None, &a));
+        let mut b = a.clone();
+        b.activity = "autre".into();
+        assert!(menu_changed(Some(&a), &b));
     }
 
     #[test]
