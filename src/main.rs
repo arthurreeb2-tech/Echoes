@@ -109,9 +109,12 @@ fn real_main() -> Result<i32> {
             let installed = install::bin_path()?;
             let me = std::env::current_exe()?;
             if std::fs::canonicalize(&me).ok() != std::fs::canonicalize(&installed).ok() {
+                // Machines installées avant l'icône : lancer l'app l'ajoute (et la rouvre après « Quitter »).
+                let _ = std::process::Command::new(&installed).args(["tray", "--ensure"]).status();
                 let status = std::process::Command::new(installed).arg("dashboard").status()?;
                 return Ok(status.code().unwrap_or(1));
             }
+            let _ = install::ensure_tray();
             dashboard::open(false)?;
         } else {
             install::run(None, true)?;
@@ -149,11 +152,32 @@ fn real_main() -> Result<i32> {
         }
         Cmd::Serve { port } => worker::serve(port).map(|_| 0),
         Cmd::Ls => client::list().map(|_| 0),
-        Cmd::Tray { ensure: false } => tray::run(),
-        Cmd::Tray { ensure: true } => anyhow::bail!("non implémenté"),
+        Cmd::Tray { ensure: false } => {
+            handoff_to_installed(&["tray"]);
+            tray::run()
+        }
+        Cmd::Tray { ensure: true } => install::ensure_tray().map(|_| 0),
         Cmd::Icon { dir } => icon::write_iconset(&dir).map(|_| 0),
         Cmd::Run { host, local, remote, pull, quiet, command } => client::run(client::RunOpts { host, local, remote, pull, quiet, command }),
     }
+}
+
+/// Lancé depuis `Echoes.app` (icône à l'ouverture de session) : on se remplace par la copie installée, tenue
+/// à jour par les mises à jour automatiques. `exec` garde le même processus, donc l'autorisation
+/// « réseau local » accordée à l'app.
+fn handoff_to_installed(args: &[&str]) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let (Ok(me), Ok(installed)) = (std::env::current_exe(), install::bin_path()) else { return };
+        let in_app = me.to_string_lossy().contains(".app/Contents/MacOS/");
+        if in_app && installed.exists() && std::fs::canonicalize(&me).ok() != std::fs::canonicalize(&installed).ok() {
+            let err = std::process::Command::new(&installed).args(args).exec();
+            eprintln!("echoes: passage à {} impossible : {err}", installed.display());
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = args;
 }
 
 /// Lancé depuis le Finder (app Echoes), une erreur n'a pas de terminal où s'afficher : fenêtre d'alerte.

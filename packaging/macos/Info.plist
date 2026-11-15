@@ -11,6 +11,9 @@
   <key>CFBundleShortVersionString</key><string>__VERSION__</string>
   <key>CFBundleVersion</key><string>__VERSION__</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <!-- macOS 15+ : sans ces clés, l'icône lancée à l'ouverture de session ne peut pas joindre les autres machines. -->
+  <key>NSLocalNetworkUsageDescription</key><string>Echoes trouve tes autres machines et leur confie les commandes à exécuter.</string>
+  <key>NSBonjourServices</key><array><string>_echoes._tcp</string></array>
   <!-- Pas d'icône dans le Dock : l'app ne fait qu'ouvrir le tableau de bord. -->
   <key>LSUIElement</key><true/>
 </dict>

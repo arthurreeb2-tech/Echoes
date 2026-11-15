@@ -8,6 +8,10 @@ use std::process::Command;
 
 #[cfg(target_os = "macos")]
 const LABEL: &str = "io.echoes.serve";
+#[cfg(target_os = "macos")]
+const TRAY_LABEL: &str = "io.echoes.tray";
+#[cfg(windows)]
+const TRAY_TASK: &str = "Echoes Tray";
 const MARK_BEGIN: &str = "<!-- echoes:begin -->";
 const MARK_END: &str = "<!-- echoes:end -->";
 
@@ -84,6 +88,11 @@ pub fn run(code: Option<String>, open: bool) -> Result<()> {
     // 3. Service lancé à chaque ouverture de session, relancé s'il s'arrête.
     let active = start_service(&dest)?;
     status::warm_up(&dest);
+    // Icône de la barre des menus : relancée sur le nouveau programme si elle tournait, créée sinon.
+    restart_tray_if_running();
+    if let Err(e) = ensure_tray() {
+        eprintln!("echoes: icône de la barre des menus non installée : {e:#}");
+    }
 
     // 4. Consigne globale pour Claude Code.
     let claude = claude_instructions(true)?;
@@ -115,6 +124,7 @@ pub fn run(code: Option<String>, open: bool) -> Result<()> {
 pub fn uninstall() -> Result<()> {
     stop_service();
     remove_service_files()?;
+    remove_tray();
     claude_instructions(false)?;
     println!("Service arrêté et retiré, consigne Claude Code retirée.");
     let dest = bin_path()?;
@@ -293,7 +303,8 @@ fn start_service(bin: &Path) -> Result<bool> {
 #[cfg(windows)]
 fn stop_service() {
     let _ = quiet(Command::new("schtasks").args(["/End", "/TN", "Echoes"]));
-    let _ = quiet(Command::new("taskkill").args(["/F", "/IM", "echoes.exe", "/FI", &format!("PID ne {}", std::process::id())]));
+    // Seulement le service : l'icône (`echoes tray`) continue de tourner.
+    let _ = quiet(Command::new("powershell").args(["-NoProfile", "-Command", &serve_kill_filter(std::process::id())]));
 }
 
 #[cfg(windows)]
@@ -309,6 +320,177 @@ fn remove_service_files() -> Result<()> {
 fn firewall_hint() {
     println!("Si le pare-feu Windows demande d'autoriser « echoes » sur les réseaux privés, accepte.");
 }
+
+/// Commande PowerShell qui arrête les processus `echoes.exe … serve`, sauf `except_pid`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn serve_kill_filter(except_pid: u32) -> String {
+    format!(
+        "Get-CimInstance Win32_Process -Filter \"Name='echoes.exe'\" | Where-Object {{ $_.ProcessId -ne {except_pid} -and $_.CommandLine -and $_.CommandLine.TrimEnd().EndsWith(' serve') }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+    )
+}
+
+// ---------- Icône de la barre des menus (`echoes tray`) ----------
+
+#[cfg(target_os = "macos")]
+fn tray_plist_path() -> Result<PathBuf> {
+    Ok(home()?.join("Library/LaunchAgents").join(format!("{TRAY_LABEL}.plist")))
+}
+
+/// Agent launchd de l'icône : sessions graphiques seulement (`Aqua`), relancé seulement après un plantage
+/// (« Quitter » sort avec 0 et n'est pas relancé), au plus une fois par minute.
+#[cfg(target_os = "macos")]
+fn tray_plist(bin: &Path, log: &Path) -> String {
+    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>{TRAY_LABEL}</string>
+  <key>ProgramArguments</key><array><string>{}</string><string>tray</string></array>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>60</integer>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>AssociatedBundleIdentifiers</key><string>io.echoes.app</string>
+  <key>StandardOutPath</key><string>{}</string>
+  <key>StandardErrorPath</key><string>{}</string>
+</dict>
+</plist>
+"#,
+        esc(&bin.display().to_string()),
+        esc(&log.display().to_string()),
+        esc(&log.display().to_string()),
+    )
+}
+
+/// Programme lancé pour l'icône : celui de `Echoes.app` s'il est installé. macOS n'autorise l'accès au
+/// réseau local qu'à une app (bundle) ; un programme nu lancé par launchd ne verrait aucune autre machine.
+/// L'app passe ensuite la main à la copie installée, tenue à jour (voir `main.rs`).
+#[cfg(target_os = "macos")]
+fn tray_program() -> Result<PathBuf> {
+    let app = PathBuf::from("/Applications/Echoes.app/Contents/MacOS/Echoes");
+    if app.exists() {
+        Ok(app)
+    } else {
+        bin_path()
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn gui_domain() -> String {
+    format!("gui/{}", unsafe { libc::getuid() })
+}
+
+#[cfg(target_os = "macos")]
+fn tray_state() -> Option<String> {
+    let out = Command::new("launchctl").args(["print", &format!("{}/{TRAY_LABEL}", gui_domain())]).output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Crée le démarrage automatique de l'icône s'il manque, puis la lance si elle ne tourne pas.
+/// Sans session graphique (installation par SSH), ne fait rien.
+#[cfg(target_os = "macos")]
+pub fn ensure_tray() -> Result<()> {
+    if !quiet(Command::new("launchctl").args(["print", &gui_domain()])) {
+        return Ok(());
+    }
+    let file = tray_plist_path()?;
+    let plist = tray_plist(&tray_program()?, &home()?.join("Library/Logs/echoes-tray.log"));
+    if fs::read_to_string(&file).ok().as_deref() != Some(plist.as_str()) {
+        fs::create_dir_all(file.parent().unwrap())?;
+        fs::write(&file, &plist)?;
+        let _ = quiet(Command::new("launchctl").args(["bootout", &format!("{}/{TRAY_LABEL}", gui_domain())]));
+    }
+    match tray_state() {
+        None => {
+            // `bootout` est asynchrone : quelques essais.
+            for _ in 0..4 {
+                if quiet(Command::new("launchctl").args(["bootstrap", &gui_domain()]).arg(&file)) {
+                    return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+            anyhow::bail!("launchctl bootstrap {TRAY_LABEL} a échoué")
+        }
+        Some(state) if !state.contains("state = running") => {
+            quiet(Command::new("launchctl").args(["kickstart", &format!("{}/{TRAY_LABEL}", gui_domain())]));
+            Ok(())
+        }
+        Some(_) => Ok(()),
+    }
+}
+
+/// Après une mise à jour : relance l'icône sur le nouveau programme, seulement si elle tournait
+/// (une icône fermée par « Quitter » le reste).
+#[cfg(target_os = "macos")]
+pub fn restart_tray_if_running() {
+    if tray_state().is_some_and(|s| s.contains("state = running")) {
+        quiet(Command::new("launchctl").args(["kickstart", "-k", &format!("{}/{TRAY_LABEL}", gui_domain())]));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn remove_tray() {
+    let _ = quiet(Command::new("launchctl").args(["bootout", &format!("{}/{TRAY_LABEL}", gui_domain())]));
+    if let Ok(f) = tray_plist_path() {
+        let _ = fs::remove_file(f);
+    }
+}
+
+#[cfg(windows)]
+fn tray_task_state() -> Option<String> {
+    let out = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &format!("(Get-ScheduledTask -TaskName '{TRAY_TASK}' -ErrorAction Stop).State")])
+        .output()
+        .ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[cfg(windows)]
+pub fn ensure_tray() -> Result<()> {
+    let state = match tray_task_state() {
+        Some(s) => s,
+        None => {
+            let action = format!("conhost.exe --headless \"{}\" tray", bin_path()?.display());
+            let ok = Command::new("schtasks").args(["/Create", "/F", "/SC", "ONLOGON", "/RL", "LIMITED", "/TN", TRAY_TASK, "/TR", &action]).status()?.success();
+            if !ok {
+                anyhow::bail!("création de la tâche planifiée « {TRAY_TASK} » impossible");
+            }
+            String::new()
+        }
+    };
+    if state != "Running" {
+        quiet(Command::new("schtasks").args(["/Run", "/TN", TRAY_TASK]));
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn restart_tray_if_running() {
+    if tray_task_state().as_deref() == Some("Running") {
+        quiet(Command::new("schtasks").args(["/End", "/TN", TRAY_TASK]));
+        quiet(Command::new("schtasks").args(["/Run", "/TN", TRAY_TASK]));
+    }
+}
+
+#[cfg(windows)]
+fn remove_tray() {
+    quiet(Command::new("schtasks").args(["/End", "/TN", TRAY_TASK]));
+    quiet(Command::new("schtasks").args(["/Delete", "/F", "/TN", TRAY_TASK]));
+}
+
+#[cfg(target_os = "linux")]
+pub fn ensure_tray() -> Result<()> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub fn restart_tray_if_running() {}
+
+#[cfg(target_os = "linux")]
+fn remove_tray() {}
 
 // ---------- PATH ----------
 
@@ -387,4 +569,28 @@ fn claude_instructions(add: bool) -> Result<bool> {
         fs::write(&file, next)?;
     }
     Ok(add)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn tray_plist_is_gui_only() {
+        let p = tray_plist(Path::new("/Users/a/.local/bin/echoes"), Path::new("/Users/a/Library/Logs/echoes-tray.log"));
+        assert!(p.contains("<key>LimitLoadToSessionType</key><string>Aqua</string>"));
+        assert!(p.contains("<key>SuccessfulExit</key><false/>"));
+        assert!(p.contains("<key>ThrottleInterval</key><integer>60</integer>"));
+        assert!(p.contains("<string>io.echoes.tray</string>"));
+        assert!(p.contains("<string>/Users/a/.local/bin/echoes</string><string>tray</string>"));
+    }
+
+    #[test]
+    fn serve_kill_filter_spares_tray() {
+        let f = serve_kill_filter(4242);
+        assert!(f.contains("' serve'"), "ne vise que les processus `serve` : {f}");
+        assert!(f.contains("4242"), "épargne le processus courant : {f}");
+        assert!(!f.contains("/IM echoes.exe"));
+    }
 }
