@@ -370,7 +370,8 @@ fn tray_plist(bin: &Path, log: &Path) -> String {
 
 /// Programme lancé pour l'icône : celui de `Echoes.app` s'il est installé. macOS n'autorise l'accès au
 /// réseau local qu'à une app (bundle) ; un programme nu lancé par launchd ne verrait aucune autre machine.
-/// L'app passe ensuite la main à la copie installée, tenue à jour (voir `main.rs`).
+/// L'icône tourne donc dans le programme de l'app : elle est mise à jour par un nouveau DMG, pas par la
+/// mise à jour automatique (qui ne remplace que la copie installée).
 #[cfg(target_os = "macos")]
 fn tray_program() -> Result<PathBuf> {
     let app = PathBuf::from("/Applications/Echoes.app/Contents/MacOS/Echoes");
