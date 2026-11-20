@@ -366,20 +366,11 @@ fn busy_worker_is_not_chosen_and_is_throttled_when_forced() {
 
 fn http(request: &str) -> String {
     use std::io::{Read, Write};
-    // Sous forte charge, la première connexion peut être coupée sans réponse : on réessaie les lectures (GET).
-    let attempts = if request.starts_with("GET") { 5 } else { 1 };
+    let mut s = std::net::TcpStream::connect("127.0.0.1:47601").unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    s.write_all(request.as_bytes()).unwrap();
     let mut out = String::new();
-    for _ in 0..attempts {
-        let mut s = std::net::TcpStream::connect("127.0.0.1:47601").unwrap();
-        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-        s.write_all(request.as_bytes()).unwrap();
-        out.clear();
-        let _ = s.read_to_string(&mut out);
-        if !out.is_empty() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
+    let _ = s.read_to_string(&mut out);
     out
 }
 
