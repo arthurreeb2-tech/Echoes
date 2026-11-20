@@ -3,12 +3,11 @@
 use crate::proto::{Entry, Msg, Secure, Status};
 use crate::history::{self, Record};
 use crate::{config, discover, status, sync};
-use std::path::PathBuf;
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -88,8 +87,18 @@ pub fn find(key: &[u8; 32], me: &str, fresh: bool) -> Vec<(SocketAddr, Status)> 
         found = probe_all(&known, key, me);
         config::save_peers(&found.iter().map(|(a, _)| *a).collect::<Vec<_>>());
     }
-    found.sort_by(|a, b| b.1.score().total_cmp(&a.1.score()));
+    rank(&mut found);
     found
+}
+
+/// De la plus disponible à la moins disponible.
+fn rank(found: &mut [(SocketAddr, Status)]) {
+    found.sort_by(|a, b| b.1.score().total_cmp(&a.1.score()));
+}
+
+/// Une machine distante n'est retenue que si elle compense le coût du transfert.
+fn worth_remote(target: &Status, me: &Status) -> bool {
+    target.score() >= me.score() * REMOTE_ADVANTAGE
 }
 
 pub fn list() -> Result<()> {
@@ -118,7 +127,7 @@ pub fn list() -> Result<()> {
         line(s, &addr.to_string());
     }
     if others.is_empty() {
-        println!("Aucune autre machine trouvée. Sur les autres : `echoes pair <code>` puis `echoes serve`.");
+        println!("Aucune autre machine trouvée. Sur les autres, lance `echoes pair <code>` puis `echoes serve`.");
     }
     Ok(())
 }
@@ -156,7 +165,9 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     let key = config::require_key()?;
     let note = |m: &str| {
         if opts.quiet {
-        } else if std::io::stderr().is_terminal() {
+            return;
+        }
+        if std::io::stderr().is_terminal() {
             eprintln!("\x1b[2mechoes: {m}\x1b[0m");
         } else {
             eprintln!("echoes: {m}");
@@ -176,7 +187,7 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     let forced = opts.remote || opts.host.is_some();
     if candidates.is_empty() {
         if forced {
-            bail!("aucune machine disponible sur le réseau");
+            bail!("aucune machine disponible sur le réseau : vérifie avec `echoes ls`");
         }
         note("aucune autre machine disponible, exécution ici");
         return run_local(&opts.command, rec, "aucune autre machine disponible");
@@ -184,7 +195,7 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     // De la plus disponible à la moins disponible ; une machine qui refuse (occupée) passe la main à la suivante.
     let mut refused = Vec::new();
     for (addr, target) in &candidates {
-        if !forced && target.score() < me.score() * REMOTE_ADVANTAGE {
+        if !forced && !worth_remote(target, &me) {
             break;
         }
         if let Some(code) = remote(*addr, target, &key, opts, &me, &note, rec)? {
@@ -193,7 +204,7 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
         refused.push(target.name.clone());
     }
     if forced {
-        bail!("aucune machine n'accepte de tâche pour l'instant ({})", refused.join(", "));
+        bail!("aucune machine n'accepte de tâche pour l'instant ({}) : réessaie plus tard ou ajoute --local", refused.join(", "));
     }
     let best = &candidates[0].1;
     let reason = if refused.is_empty() {
@@ -229,14 +240,14 @@ fn pull_path(root: &Path, cwd: &Path, p: &str) -> Result<String> {
             other => out.push(other),
         }
     }
-    sync::rel(root, &out).ok_or_else(|| anyhow!("--pull {p} : chemin hors du projet"))
+    sync::rel(root, &out).ok_or_else(|| anyhow!("--pull {p} : chemin hors du projet"))
 }
 
 /// Garde-fou : pas de projet démesuré.
 fn too_big(manifest: &[Entry]) -> Option<String> {
     let size: u64 = manifest.iter().map(|e| e.size).sum();
     if manifest.len() > 50_000 || size > 4 << 30 {
-        return Some(format!("projet trop volumineux ({} fichiers, {:.1} Go) : ajoute un .echoesignore", manifest.len(), size as f64 / (1u64 << 30) as f64));
+        return Some(format!("projet trop volumineux ({} fichiers, {:.1} Go) : ajoute un .echoesignore", manifest.len(), size as f64 / (1u64 << 30) as f64));
     }
     None
 }
@@ -279,7 +290,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
             Ok(Msg::Need(n)) => break n,
             Ok(Msg::Ping) => continue,
             Ok(Msg::Error(e)) => {
-                note(&format!("{} : {e}", target.name));
+                note(&format!("{} : {e}", target.name));
                 return Ok(None);
             }
             // Rien n'a encore été exécuté là-bas : on peut passer à une autre machine.
@@ -287,7 +298,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
         }
     };
     if target.arch != me.arch && !pull.is_empty() {
-        note(&format!("attention : {} est en {}, cette machine en {} ; les fichiers compilés rapatriés par --pull ne s'exécuteront pas ici", target.name, target.arch, me.arch));
+        note(&format!("attention : {} est en {}, cette machine en {} ; les fichiers compilés rapatriés par --pull ne s'exécuteront pas ici", target.name, target.arch, me.arch));
     }
     rec.remote = true;
     rec.target = target.name.clone();
@@ -364,5 +375,110 @@ fn safe_to_write(dest: &Path, sent: Option<&Entry>) -> bool {
         (Some(_), Err(_)) => false,
         (None, Ok(_)) => false,
         (None, Err(_)) => !dest.exists(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn status(name: &str, bench: f64, free: f64, gpu: Option<f32>, mem_free_gb: f64) -> Status {
+        Status { id: name.into(), name: name.into(), os: "linux".into(), arch: "x86_64".into(), cores: 8, bench, free, mem_gb: 16.0, version: "0".into(), gpu, mem_free_gb, jobs: 0 }
+    }
+
+    fn addr(port: u16) -> SocketAddr {
+        SocketAddr::from(([127, 0, 0, 1], port))
+    }
+
+    fn tmp(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("echoes-client-test-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn ranks_most_available_first() {
+        let mut found = vec![
+            (addr(1), status("lente", 1.0, 2.0, None, 8.0)),
+            (addr(2), status("rapide", 2.0, 6.0, None, 8.0)),
+            (addr(3), status("graphique-prise", 2.0, 6.0, Some(95.0), 8.0)),
+        ];
+        rank(&mut found);
+        let names: Vec<_> = found.iter().map(|(_, s)| s.name.as_str()).collect();
+        assert_eq!(names, ["rapide", "graphique-prise", "lente"]);
+    }
+
+    #[test]
+    fn remote_must_beat_local_by_margin() {
+        let me = status("ici", 1.0, 4.0, None, 8.0);
+        assert!(!worth_remote(&status("égale", 1.0, 4.0, None, 8.0), &me));
+        assert!(!worth_remote(&status("un peu mieux", 1.0, 4.0 * 1.2, None, 8.0), &me));
+        assert!(worth_remote(&status("nettement mieux", 1.0, 4.0 * 1.4, None, 8.0), &me));
+        assert!(worth_remote(&status("pile le seuil", 1.0, 4.0 * REMOTE_ADVANTAGE, None, 8.0), &me));
+    }
+
+    #[test]
+    fn host_with_and_without_port() {
+        assert_eq!(parse_host("127.0.0.1").unwrap(), SocketAddr::from(([127, 0, 0, 1], crate::proto::DEFAULT_PORT)));
+        assert_eq!(parse_host(" 127.0.0.1:5000 ").unwrap(), addr(5000));
+        assert!(parse_host("127.0.0.1:pas-un-port").is_err());
+    }
+
+    #[test]
+    fn pull_path_is_relative_to_project_root() {
+        let root = Path::new("/p/projet");
+        let cwd = Path::new("/p/projet/sub");
+        assert_eq!(pull_path(root, cwd, "../build").unwrap(), "build");
+        assert_eq!(pull_path(root, cwd, "./out/x").unwrap(), "sub/out/x");
+        assert_eq!(pull_path(root, cwd, "..").unwrap(), "");
+        assert!(pull_path(root, cwd, "../../autre").is_err());
+    }
+
+    #[test]
+    fn project_root_is_git_root_or_cwd() {
+        let top = tmp("root");
+        std::fs::create_dir_all(top.join("a/b")).unwrap();
+        assert_eq!(project_root(&top.join("a/b")), top.join("a/b"));
+        std::fs::create_dir_all(top.join(".git")).unwrap();
+        assert_eq!(project_root(&top.join("a/b")), top);
+        let _ = std::fs::remove_dir_all(&top);
+    }
+
+    #[test]
+    fn too_big_limits_files_and_size() {
+        let entry = |size| Entry { path: "f".into(), hash: [0; 32], mode: 0o644, size };
+        assert!(too_big(&[entry(10), entry(20)]).is_none());
+        assert!(too_big(&vec![entry(1); 50_001]).unwrap().contains("50001 fichiers"));
+        let msg = too_big(&[entry(5 << 30)]).unwrap();
+        assert!(msg.contains("5.0 Go") && msg.contains(".echoesignore"), "{msg}");
+    }
+
+    #[test]
+    fn writes_back_only_untouched_files() {
+        let dir = tmp("write");
+        let file = dir.join("f.txt");
+        std::fs::write(&file, "v1").unwrap();
+        let sent = Entry { path: "f.txt".into(), hash: sync::hash(&file).unwrap(), mode: 0o644, size: 2 };
+        assert!(safe_to_write(&file, Some(&sent)));
+        std::fs::write(&file, "modifié ici").unwrap();
+        assert!(!safe_to_write(&file, Some(&sent)));
+        // Fichier créé à distance : accepté seulement s'il n'existe pas ici.
+        assert!(!safe_to_write(&file, None));
+        assert!(safe_to_write(&dir.join("nouveau.txt"), None));
+        // Fichier supprimé ici entre-temps : on ne le recrée pas.
+        assert!(!safe_to_write(&dir.join("supprimé.txt"), Some(&sent)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_run_reports_exit_code_and_reason() {
+        let mut rec = Record::new("ici", "id", &["sh".into()], "projet");
+        let code = run_local(&["sh".into(), "-c".into(), "exit 3".into()], &mut rec, "test").unwrap();
+        assert_eq!(code, 3);
+        assert!(!rec.remote);
+        assert_eq!(rec.reason, "test");
+        assert_eq!(rec.est_local_ms, rec.command_ms);
+        assert!(run_local(&["commande-qui-n-existe-pas-echoes".into()], &mut rec, "test").is_err());
     }
 }

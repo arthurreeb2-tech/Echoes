@@ -16,7 +16,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "echoes", version, about = "Lance une commande ici, elle tourne sur la machine la plus disponible de ton réseau.")]
 struct Cli {
-    /// Sans commande : installe Echoes si besoin, puis ouvre le tableau de bord.
+    /// Sans commande : installe Echoes si besoin, puis ouvre le tableau de bord
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -113,13 +113,13 @@ fn real_main() -> Result<i32> {
                     k
                 }
             };
-            println!("Sur chaque autre machine, lance :\n\n  echoes pair {}\n", hex::encode(key));
-            println!("Ce code donne le droit d'exécuter des commandes sur tes machines : ne le partage pas.");
+            println!("Sur chaque autre machine, lance :\n\n  echoes pair {}\n", hex::encode(key));
+            println!("Ce code donne le droit d'exécuter des commandes sur tes machines : ne le partage pas.");
             Ok(0)
         }
         Cmd::Pair { code: Some(code) } => {
             config::save_key(&config::parse_key(&code)?)?;
-            println!("Machine appairée.");
+            println!("Machine appairée");
             Ok(0)
         }
         Cmd::Install { code, open } => install::run(code, open).map(|_| 0),
@@ -142,8 +142,65 @@ fn real_main() -> Result<i32> {
 fn alert(message: &str) {
     use std::io::IsTerminal;
     if cfg!(target_os = "macos") && std::env::args().len() == 1 && !std::io::stderr().is_terminal() {
-        let text = message.replace('\\', "\\\\").replace('"', "\\\"");
-        let script = format!("display alert \"Echoes\" message \"{text}\" as critical");
+        let script = format!("display alert \"Echoes\" message \"{}\" as critical", applescript_text(message));
         let _ = std::process::Command::new("osascript").args(["-e", &script]).status();
+    }
+}
+
+/// Texte protégé pour être placé entre guillemets dans un script AppleScript.
+fn applescript_text(message: &str) -> String {
+    message.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(std::iter::once("echoes").chain(args.iter().copied()))
+    }
+
+    #[test]
+    fn no_command_is_allowed() {
+        assert!(parse(&[]).unwrap().cmd.is_none());
+    }
+
+    #[test]
+    fn pair_with_and_without_code() {
+        assert!(matches!(parse(&["pair"]).unwrap().cmd, Some(Cmd::Pair { code: None })));
+        assert!(matches!(parse(&["pair", "abc"]).unwrap().cmd, Some(Cmd::Pair { code: Some(c) }) if c == "abc"));
+    }
+
+    #[test]
+    fn run_keeps_command_flags_after_separator() {
+        let cli = parse(&["run", "--pull", "out", "--pull", "dist", "-q", "--", "cargo", "build", "--release"]).unwrap();
+        let Some(Cmd::Run { pull, quiet, command, local, remote, host }) = cli.cmd else { panic!("run attendu") };
+        assert_eq!(pull, ["out", "dist"]);
+        assert!(quiet && !local && !remote && host.is_none());
+        assert_eq!(command, ["cargo", "build", "--release"]);
+    }
+
+    #[test]
+    fn run_requires_a_command() {
+        assert!(parse(&["run"]).is_err());
+    }
+
+    #[test]
+    fn local_conflicts_with_remote_and_host() {
+        assert!(parse(&["run", "--local", "--remote", "ls"]).is_err());
+        assert!(parse(&["run", "--local", "--host", "mac", "ls"]).is_err());
+        assert!(parse(&["run", "--remote", "ls"]).is_ok());
+    }
+
+    #[test]
+    fn serve_port_and_update_check() {
+        assert!(matches!(parse(&["serve", "--port", "4000"]).unwrap().cmd, Some(Cmd::Serve { port: Some(4000) })));
+        assert!(parse(&["serve", "--port", "70000"]).is_err());
+        assert!(matches!(parse(&["update", "--check"]).unwrap().cmd, Some(Cmd::Update { check: true })));
+    }
+
+    #[test]
+    fn applescript_text_escapes_quotes_and_backslashes() {
+        assert_eq!(applescript_text(r#"a"b\c"#), r#"a\"b\\c"#);
     }
 }
