@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echoes, design système</title>
+<meta name="description" content="Jetons, couleurs, typographie, icône et composants d'Echoes.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/echoes.css">
+<style>
+.top { max-width: 1040px; margin: 0 auto; padding: var(--space-5) var(--space-4); display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); }
+.theme { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-full); padding: 3px; background: var(--bg-raised); }
+.theme button { border: 0; background: none; color: var(--text-muted); font: 500 var(--text-xs)/1 var(--font-sans); padding: 8px 12px; border-radius: var(--radius-full); cursor: pointer; min-height: 32px; }
+.theme button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+main { max-width: 1040px; margin: 0 auto; padding: var(--space-8) var(--space-4) var(--space-24); }
+section { padding-top: var(--space-16); }
+section > .e-eyebrow { margin-bottom: var(--space-2); }
+section > .e-title { margin-bottom: var(--space-3); }
+section > p.e-muted { margin: 0 0 var(--space-6); max-width: 46em; }
+.intro .e-lead { margin-top: var(--space-4); max-width: 36em; }
+
+.icons { display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--space-4); }
+.icons .e-card { display: grid; place-items: center; gap: var(--space-3); text-align: center; min-height: 220px; }
+.icons .big { background: var(--glow), var(--bg-raised); grid-row: span 2; }
+.icons .big img { width: min(300px, 70%); filter: drop-shadow(0 24px 48px rgba(217, 103, 58, .25)); }
+.icons .row { display: flex; align-items: end; gap: var(--space-5); justify-content: center; flex-wrap: wrap; }
+.icons small { color: var(--text-muted); font-size: var(--text-xs); }
+.icons .mono { color: var(--text); }
+.anatomy { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-top: var(--space-4); }
+.anatomy .e-card b { display: block; margin-bottom: var(--space-1); }
+.anatomy .e-card span { color: var(--text-muted); font-size: 15px; }
+
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
+.sw { border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-raised); }
+.sw i { display: block; height: 72px; }
+.sw div { padding: var(--space-2) var(--space-3); font-size: var(--text-xs); }
+.sw b { display: block; font-size: 13px; }
+.sw code { font-family: var(--font-mono); color: var(--text-muted); }
+.group { margin: var(--space-6) 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
+
+.roles { width: 100%; border-collapse: collapse; font-size: var(--text-sm); background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
+.roles th, .roles td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.roles th { font-size: var(--text-xs); color: var(--text-muted); font-weight: 600; }
+.roles tr:last-child td { border-bottom: 0; }
+.roles td:first-child { font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+.chip { display: inline-block; width: 18px; height: 18px; border-radius: 5px; vertical-align: middle; border: 1px solid var(--line); margin-right: 8px; }
+
+.type .line { display: grid; grid-template-columns: 140px 1fr; gap: var(--space-4); align-items: baseline; padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.type .line code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); }
+
+.scale { display: flex; flex-wrap: wrap; gap: var(--space-5); align-items: end; }
+.scale div { text-align: center; font-size: var(--text-xs); color: var(--text-muted); font-family: var(--font-mono); }
+.scale i { display: block; background: var(--accent); border-radius: 2px; margin: 0 auto var(--space-2); opacity: .85; }
+.radii { display: flex; flex-wrap: wrap; gap: var(--space-5); margin-top: var(--space-8); }
+.radii div { text-align: center; font-size: var(--text-xs); color: var(--text-muted); font-family: var(--font-mono); }
+.radii i { display: block; width: 72px; height: 72px; border: 2px solid var(--accent); background: var(--accent-soft); margin-bottom: var(--space-2); }
+
+.demo { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+.demo .e-card > small { display: block; color: var(--text-muted); font-size: var(--text-xs); font-family: var(--font-mono); margin-bottom: var(--space-4); }
+.demo .stack { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.machine { display: grid; gap: 6px; padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.machine:last-child { border-bottom: 0; padding-bottom: 0; }
+.machine .t { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; }
+.machine .t .e-badge { margin-left: auto; }
+.machine .m { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.rules { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.rules ul { margin: 0; padding-left: 1.1em; color: var(--text-muted); font-size: 15px; }
+.rules li + li { margin-top: var(--space-2); }
+.rules .yes b { color: var(--ok); }
+.rules .no b { color: var(--warn); }
+footer { margin-top: var(--space-16); color: var(--text-muted); font-size: var(--text-sm); }
+
+@media (max-width: 760px) {
+  .icons, .demo, .rules, .anatomy { grid-template-columns: 1fr; }
+  .icons .big { grid-row: auto; }
+  .type .line { grid-template-columns: 1fr; gap: var(--space-1); }
+}
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="e-brand" href="./"><img src="assets/favicon.svg" alt="">Echoes</a>
+  <div class="theme" role="group" aria-label="Thème">
+    <button data-t="auto" aria-pressed="true">Auto</button><button data-t="light" aria-pressed="false">Clair</button><button data-t="dark" aria-pressed="false">Sombre</button>
+  </div>
+</nav>
+<main>
+  <header class="intro">
+    <p class="e-eyebrow">Design système · v1</p>
+    <h1 class="e-display">Écho <span class="e-accent-text">cuivre</span>.</h1>
+    <p class="e-lead">Une encre profonde, un cuivre qui chauffe, des ondes qui s'éloignent. Tout ce qu'Echoes montre, l'icône, la page de téléchargement et le tableau de bord, vient des jetons ci-dessous.</p>
+  </header>
+
+  <section>
+    <p class="e-eyebrow">Icône</p>
+    <h2 class="e-title">Un point, trois ondes, un satellite.</h2>
+    <p class="e-muted">Le point central est ta machine. Les ondes partent, de plus en plus fines et pâles, comme un écho qui s'éteint. Elles s'ouvrent toutes dans la même direction, vers le satellite : la machine qui reçoit le travail et renvoie le résultat.</p>
+    <div class="icons">
+      <div class="e-card big"><img src="assets/echoes-icone.svg" alt="Icône d'app Echoes"><small>echoes-icone.svg · 1024 × 1024, grille macOS (corps 824, carré continu)</small></div>
+      <div class="e-card">
+        <div class="row">
+          <div><img src="assets/echoes-icone.svg" width="64" height="64" alt=""><br><small>64</small></div>
+          <div><img src="assets/echoes-icone.svg" width="32" height="32" alt=""><br><small>32</small></div>
+          <div><img src="assets/favicon.svg" width="16" height="16" alt=""><br><small>16</small></div>
+        </div>
+        <small>Sous 64 px, le dessin simplifié (favicon.svg) garde deux ondes plus épaisses.</small>
+      </div>
+      <div class="e-card">
+        <div class="row">
+          <img src="assets/echoes-glyphe.svg" width="72" height="72" alt="">
+          <span class="mono" aria-hidden="true"></span>
+        </div>
+        <small>Glyphe seul, en cuivre ou d'une seule teinte (currentColor).</small>
+      </div>
+    </div>
+    <div class="anatomy">
+      <div class="e-card"><b>Marge</b><span>Corps de 824 sur 1024, ombre portée dans la marge : l'icône s'aligne avec celles d'Apple dans le Dock et le Finder.</span></div>
+      <div class="e-card"><b>Direction</b><span>Ouvertures à −45°, vers le haut à droite. Ne jamais tourner le glyphe : c'est le sens du départ.</span></div>
+      <div class="e-card"><b>Lumière</b><span>Le cœur est la seule source : halo ambre au centre, reflet blanc à 14 % sur le haut du carré.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <p class="e-eyebrow">Couleur</p>
+    <h2 class="e-title">Primitives.</h2>
+    <p class="e-muted">La palette brute. Une page n'utilise jamais ces valeurs directement : elle passe par les rôles plus bas, qui s'inversent en mode sombre.</p>
+    <div class="group">Encre</div>
+    <div class="swatches" id="sw-ink"></div>
+    <div class="group">Cuivre et ambre</div>
+    <div class="swatches" id="sw-copper"></div>
+    <div class="group">Papier et états</div>
+    <div class="swatches" id="sw-other"></div>
+  </section>
+
+  <section>
+    <p class="e-eyebrow">Couleur</p>
+    <h2 class="e-title">Rôles.</h2>
+    <p class="e-muted">Bascule le thème en haut à droite : les mêmes rôles prennent leurs valeurs sombres. Le texte sur fond respecte un contraste d'au moins 4,5:1.</p>
+    <table class="roles"><thead><tr><th>Jeton</th><th>Usage</th></tr></thead><tbody id="roles"></tbody></table>
+  </section>
+
+  <section class="type">
+    <p class="e-eyebrow">Typographie</p>
+    <h2 class="e-title">La police du système, rien d'autre.</h2>
+    <p class="e-muted">SF Pro sur Mac, Segoe UI sur Windows : aucune police téléchargée, rien qui sorte du réseau. Les titres serrent l'approche, les chiffres sont tabulaires.</p>
+    <div class="line"><code>display · 56/1,08</code><div class="e-display">Tes ordinateurs s'entraident.</div></div>
+    <div class="line"><code>title · 28/1,3</code><div class="e-title">Machines du réseau</div></div>
+    <div class="line"><code>lead · 20/1,5</code><div class="e-lead">Le résultat revient comme si de rien n'était.</div></div>
+    <div class="line"><code>body · 16/1,55</code><div>Une machine prise par un rendu 3D est ménagée : les tâches vont ailleurs.</div></div>
+    <div class="line"><code>eyebrow · 12, capitales</code><div class="e-eyebrow">Calcul partagé</div></div>
+    <div class="line"><code>mono · 13</code><div><code class="e-code">echoes run -- cargo build --release</code></div></div>
+  </section>
+
+  <section>
+    <p class="e-eyebrow">Espace et forme</p>
+    <h2 class="e-title">Multiples de 4, coins généreux.</h2>
+    <p class="e-muted">Espacements de 4 à 96 px. Rayons de 6 (code) à 24 (grandes surfaces) ; les pastilles et étiquettes sont entièrement arrondies.</p>
+    <div class="scale" id="scale"></div>
+    <div class="radii" id="radii"></div>
+  </section>
+
+  <section>
+    <p class="e-eyebrow">Composants</p>
+    <h2 class="e-title">Les briques.</h2>
+    <p class="e-muted">Toutes dans assets/echoes.css, préfixées e-. Cibles tactiles de 44 px minimum.</p>
+    <div class="demo">
+      <div class="e-card">
+        <small>.e-btn--primary · --secondary · --quiet</small>
+        <div class="stack">
+          <a class="e-btn e-btn--primary" href="#">Télécharger</a>
+          <a class="e-btn e-btn--secondary" href="#">Afficher le code</a>
+          <a class="e-btn e-btn--quiet" href="#">Code source</a>
+        </div>
+      </div>
+      <div class="e-card">
+        <small>.e-badge · .e-dot</small>
+        <div class="stack">
+          <span class="e-badge e-badge--ok"><i class="e-dot"></i>Disponible</span>
+          <span class="e-badge e-badge--accent"><i class="e-dot e-dot--busy"></i>Occupée</span>
+          <span class="e-badge"><i class="e-dot e-dot--off"></i>Hors ligne</span>
+          <span class="e-badge e-badge--warn">Échec</span>
+        </div>
+      </div>
+      <div class="e-card">
+        <small>.e-meter · machine</small>
+        <div class="machine"><div class="t"><i class="e-dot"></i>mac-mini<span class="e-badge">Apple M1</span></div><div class="e-meter"><i style="width:18%"></i></div><div class="m"><span>7 cœurs libres sur 8</span><span>18 %</span></div></div>
+        <div class="machine"><div class="t"><i class="e-dot e-dot--busy"></i>imac<span class="e-badge">Intel i7</span></div><div class="e-meter"><i style="width:72%"></i></div><div class="m"><span>Rendu en cours, tâches bridées</span><span>72 %</span></div></div>
+      </div>
+      <div class="e-card e-card--glow">
+        <small>.e-terminal · .e-card--glow</small>
+        <pre class="e-terminal" style="margin:0"><span class="p">$ </span>echoes ls
+mac-mini   <span class="ok">●</span> 7/8 cœurs   GPU 4 %
+imac       <span class="p">●</span> 2/8 cœurs   GPU 61 %</pre>
+      </div>
+      <div class="e-card">
+        <small>.e-steps / .e-step</small>
+        <ol class="e-steps">
+          <li class="e-step"><div><b>Ouvre le fichier</b><span>Glisse Echoes dans Applications.</span></div></li>
+          <li class="e-step"><div><b>Colle le code</b><span>Sur tes autres machines.</span></div></li>
+        </ol>
+      </div>
+      <div class="e-card">
+        <small>.e-disclosure</small>
+        <details class="e-disclosure" open><summary>Premier lancement</summary><p>macOS demande une confirmation la première fois.</p></details>
+        <details class="e-disclosure"><summary>Linux et ligne de commande</summary><p>Une commande dans le terminal.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="e-eyebrow">Règles</p>
+    <h2 class="e-title">Ce qui fait Echoes, et ce qui le défait.</h2>
+    <div class="rules">
+      <div class="e-card yes"><b>Oui</b><ul>
+        <li>Le cuivre pour une seule chose à la fois : l'action principale, ou ce qui est en train de travailler.</li>
+        <li>Vert pour disponible, cuivre pour occupée, gris pour hors ligne. Toujours avec un mot, jamais la couleur seule.</li>
+        <li>Mouvements de 120 à 480 ms, sans rebond, coupés si le système demande moins d'animations.</li>
+        <li>Le dégradé cuivre-ambre réservé à l'icône, au bouton principal, aux jauges et à un mot du titre.</li>
+      </ul></div>
+      <div class="e-card no"><b>Non</b><ul>
+        <li>Pas de police téléchargée, d'image externe ni de traceur : la page reste locale et privée.</li>
+        <li>Pas de nouvelle couleur hors des primitives ; ajouter un jeton d'abord, l'utiliser ensuite.</li>
+        <li>Pas d'icône tournée, recolorée en dehors du cuivre ou du monochrome, ni posée sur une photo.</li>
+        <li>Pas d'ombre décorative : seules les cartes mises en avant et le bouton principal en ont une.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <footer>Sources : <code class="e-code">brand/tokens.json</code>, <code class="e-code">brand/generer.py</code>, <code class="e-code">docs/assets/echoes.css</code>. <a href="./">Retour à la page de téléchargement</a></footer>
+</main>
+<script>
+const css = getComputedStyle(document.documentElement);
+const v = n => css.getPropertyValue(n).trim();
+function swatches(id, names) {
+  document.getElementById(id).innerHTML = names.map(n =>
+    `<div class="sw"><i style="background:var(--${n})"></i><div><b>${n}</b><code>${v("--" + n)}</code></div></div>`).join("");
+}
+swatches("sw-ink", ["ink-950", "ink-900", "ink-800", "ink-700", "ink-600", "ink-400", "ink-300", "ink-200"]);
+swatches("sw-copper", ["copper-700", "copper-600", "copper-500", "copper-400", "amber-300", "amber-100"]);
+swatches("sw-other", ["paper-0", "paper-50", "paper-100", "paper-200", "green-600", "green-400", "red-600", "red-400"]);
+const roles = [
+  ["bg", "Fond de page"], ["bg-raised", "Cartes, panneaux"], ["bg-sunken", "Champs, code"], ["line", "Bords et séparateurs"],
+  ["text", "Texte principal"], ["text-muted", "Texte secondaire, légendes"], ["accent", "Action principale, liens, occupé"],
+  ["accent-soft", "Fond d'une étiquette cuivre"], ["ok", "Disponible, réussite"], ["warn", "Erreur, échec"], ["idle", "Hors ligne"], ["track", "Fond des jauges"],
+];
+document.getElementById("roles").innerHTML = roles.map(([n, u]) => `<tr><td><span class="chip" style="background:var(--${n})"></span>--${n}</td><td>${u}</td></tr>`).join("");
+document.getElementById("scale").innerHTML = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 24].map(n =>
+  `<div><i style="width:var(--space-${n});height:var(--space-${n})"></i>${v("--space-" + n)}</div>`).join("");
+document.getElementById("radii").innerHTML = ["sm", "md", "lg", "xl", "full"].map(n =>
+  `<div><i style="border-radius:var(--radius-${n})"></i>${n}</div>`).join("");
+// Le glyphe monochrome est un fichier externe : on l'insère en ligne pour qu'il prenne la couleur du texte.
+fetch("assets/echoes-glyphe-mono.svg").then(r => r.text()).then(t => {
+  document.querySelector(".mono").innerHTML = t.replace(/width="\d+" height="\d+"/, 'width="72" height="72"');
+}).catch(() => {});
+// Thème : auto (système), clair ou sombre, retenu pour la prochaine visite.
+const btns = document.querySelectorAll(".theme button");
+function setTheme(t) {
+  if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.dataset.theme = t;
+  btns.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
+  try { localStorage.setItem("echoes-theme", t); } catch (e) {}
+}
+btns.forEach(b => b.addEventListener("click", () => setTheme(b.dataset.t)));
+try { const t = localStorage.getItem("echoes-theme"); if (t) setTheme(t); } catch (e) {}
+</script>
+</body>
+</html>

@@ -142,11 +142,12 @@ pub fn monitor() -> Result<Arc<Mutex<Status>>> {
     std::thread::spawn(move || {
         sys.refresh_cpu_usage();
         let mut previous_gpu: Option<f32> = None;
-        for tick in 0u64.. {
+        let mut tick: u64 = 0;
+        loop {
             std::thread::sleep(Duration::from_secs(1));
             sys.refresh_cpu_usage();
             let free = free_cores(&sys);
-            if tick % 4 == 0 {
+            if tick.is_multiple_of(4) {
                 sys.refresh_memory();
                 let gpu = gpu_percent();
                 // On retient la plus forte des deux dernières mesures : un rendu qui travaille par à-coups reste « occupé ».
@@ -160,6 +161,7 @@ pub fn monitor() -> Result<Arc<Mutex<Status>>> {
                 s.mem_free_gb = sys.available_memory() as f64 / GB;
             }
             out.lock().unwrap().free = free;
+            tick = tick.wrapping_add(1);
         }
     });
     Ok(shared)
