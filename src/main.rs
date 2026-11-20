@@ -16,7 +16,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "echoes", version, about = "Lance une commande ici, elle tourne sur la machine la plus disponible de ton réseau.")]
 struct Cli {
-    /// Sans commande : installe Echoes si besoin, puis ouvre le tableau de bord.
+    /// Sans commande : installe Echoes si besoin, puis ouvre le tableau de bord
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -113,13 +113,13 @@ fn real_main() -> Result<i32> {
                     k
                 }
             };
-            println!("Sur chaque autre machine, lance :\n\n  echoes pair {}\n", hex::encode(key));
-            println!("Ce code donne le droit d'exécuter des commandes sur tes machines : ne le partage pas.");
+            println!("Sur chaque autre machine, lance :\n\n  echoes pair {}\n", hex::encode(key));
+            println!("Ce code donne le droit d'exécuter des commandes sur tes machines : ne le partage pas.");
             Ok(0)
         }
         Cmd::Pair { code: Some(code) } => {
             config::save_key(&config::parse_key(&code)?)?;
-            println!("Machine appairée.");
+            println!("Machine appairée");
             Ok(0)
         }
         Cmd::Install { code, open } => install::run(code, open).map(|_| 0),

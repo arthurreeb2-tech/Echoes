@@ -59,7 +59,7 @@ pub fn serve(port: Option<u16>) -> Result<()> {
         (s.name.clone(), s.id.clone())
     };
     let _mdns = discover::advertise(&name, &id, port).map_err(|e| eprintln!("echoes: annonce réseau impossible ({e})")).ok();
-    eprintln!("echoes {}: {name} prête sa puissance sur le port {port}", env!("CARGO_PKG_VERSION"));
+    eprintln!("echoes {} : {name} prête sa puissance sur le port {port}", env!("CARGO_PKG_VERSION"));
     crate::dashboard::spawn_server();
     if update::enabled() {
         std::thread::spawn(auto_update);
@@ -79,7 +79,7 @@ pub fn serve(port: Option<u16>) -> Result<()> {
             let _conn = conn;
             let peer = stream.peer_addr().map(|a| a.to_string()).unwrap_or_default();
             if let Err(e) = handle(stream, state) {
-                eprintln!("echoes: {peer} : {e:#}");
+                eprintln!("echoes: {peer} : {e:#}");
             }
         });
     }
@@ -100,7 +100,7 @@ fn auto_update() {
                             eprintln!("echoes: mise à jour vers {} installée, redémarrage", release.version);
                             update::restart();
                         }
-                        Err(e) => eprintln!("echoes: mise à jour impossible : {e:#}"),
+                        Err(e) => eprintln!("echoes: mise à jour impossible : {e:#}"),
                     }
                     UPDATING.store(false, Ordering::SeqCst);
                     break;
@@ -109,7 +109,7 @@ fn auto_update() {
                 std::thread::sleep(Duration::from_secs(30));
             },
             Ok(None) => {}
-            Err(e) => eprintln!("echoes: vérification des mises à jour impossible : {e:#}"),
+            Err(e) => eprintln!("echoes: vérification des mises à jour impossible : {e:#}"),
         }
         std::thread::sleep(Duration::from_secs(6 * 3600));
     }
@@ -217,7 +217,7 @@ fn run(conn: &mut Secure, project: &str, name: &str, manifest: Vec<Entry>, cwd: 
         match conn.recv()? {
             Msg::File { path, mode, first, last, data, .. } => {
                 if !wanted.contains_key(path.as_str()) {
-                    bail!("fichier non annoncé : {path}");
+                    bail!("fichier non annoncé : {path}");
                 }
                 receiver.chunk(Some(sync::safe_dest(&ws, &path)?), mode, first, last, &data)?;
             }

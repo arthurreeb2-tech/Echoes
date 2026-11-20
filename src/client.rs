@@ -3,12 +3,11 @@
 use crate::proto::{Entry, Msg, Secure, Status};
 use crate::history::{self, Record};
 use crate::{config, discover, status, sync};
-use std::path::PathBuf;
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -88,8 +87,18 @@ pub fn find(key: &[u8; 32], me: &str, fresh: bool) -> Vec<(SocketAddr, Status)> 
         found = probe_all(&known, key, me);
         config::save_peers(&found.iter().map(|(a, _)| *a).collect::<Vec<_>>());
     }
-    found.sort_by(|a, b| b.1.score().total_cmp(&a.1.score()));
+    rank(&mut found);
     found
+}
+
+/// De la plus disponible à la moins disponible.
+fn rank(found: &mut [(SocketAddr, Status)]) {
+    found.sort_by(|a, b| b.1.score().total_cmp(&a.1.score()));
+}
+
+/// Une machine distante n'est retenue que si elle compense le coût du transfert.
+fn worth_remote(target: &Status, me: &Status) -> bool {
+    target.score() >= me.score() * REMOTE_ADVANTAGE
 }
 
 pub fn list() -> Result<()> {
@@ -118,7 +127,7 @@ pub fn list() -> Result<()> {
         line(s, &addr.to_string());
     }
     if others.is_empty() {
-        println!("Aucune autre machine trouvée. Sur les autres : `echoes pair <code>` puis `echoes serve`.");
+        println!("Aucune autre machine trouvée. Sur les autres, lance `echoes pair <code>` puis `echoes serve`.");
     }
     Ok(())
 }
@@ -156,7 +165,9 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     let key = config::require_key()?;
     let note = |m: &str| {
         if opts.quiet {
-        } else if std::io::stderr().is_terminal() {
+            return;
+        }
+        if std::io::stderr().is_terminal() {
             eprintln!("\x1b[2mechoes: {m}\x1b[0m");
         } else {
             eprintln!("echoes: {m}");
@@ -176,7 +187,7 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     let forced = opts.remote || opts.host.is_some();
     if candidates.is_empty() {
         if forced {
-            bail!("aucune machine disponible sur le réseau");
+            bail!("aucune machine disponible sur le réseau : vérifie avec `echoes ls`");
         }
         note("aucune autre machine disponible, exécution ici");
         return run_local(&opts.command, rec, "aucune autre machine disponible");
@@ -184,7 +195,7 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
     // De la plus disponible à la moins disponible ; une machine qui refuse (occupée) passe la main à la suivante.
     let mut refused = Vec::new();
     for (addr, target) in &candidates {
-        if !forced && target.score() < me.score() * REMOTE_ADVANTAGE {
+        if !forced && !worth_remote(target, me) {
             break;
         }
         if let Some(code) = remote(*addr, target, &key, opts, &me, &note, rec)? {
@@ -193,7 +204,7 @@ fn choose_and_run(opts: &RunOpts, rec: &mut Record) -> Result<i32> {
         refused.push(target.name.clone());
     }
     if forced {
-        bail!("aucune machine n'accepte de tâche pour l'instant ({})", refused.join(", "));
+        bail!("aucune machine n'accepte de tâche pour l'instant ({}) : réessaie plus tard ou ajoute --local", refused.join(", "));
     }
     let best = &candidates[0].1;
     let reason = if refused.is_empty() {
@@ -229,14 +240,14 @@ fn pull_path(root: &Path, cwd: &Path, p: &str) -> Result<String> {
             other => out.push(other),
         }
     }
-    sync::rel(root, &out).ok_or_else(|| anyhow!("--pull {p} : chemin hors du projet"))
+    sync::rel(root, &out).ok_or_else(|| anyhow!("--pull {p} : chemin hors du projet"))
 }
 
 /// Garde-fou : pas de projet démesuré.
 fn too_big(manifest: &[Entry]) -> Option<String> {
     let size: u64 = manifest.iter().map(|e| e.size).sum();
     if manifest.len() > 50_000 || size > 4 << 30 {
-        return Some(format!("projet trop volumineux ({} fichiers, {:.1} Go) : ajoute un .echoesignore", manifest.len(), size as f64 / (1u64 << 30) as f64));
+        return Some(format!("projet trop volumineux ({} fichiers, {:.1} Go) : ajoute un .echoesignore", manifest.len(), size as f64 / (1u64 << 30) as f64));
     }
     None
 }
@@ -279,7 +290,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
             Ok(Msg::Need(n)) => break n,
             Ok(Msg::Ping) => continue,
             Ok(Msg::Error(e)) => {
-                note(&format!("{} : {e}", target.name));
+                note(&format!("{} : {e}", target.name));
                 return Ok(None);
             }
             // Rien n'a encore été exécuté là-bas : on peut passer à une autre machine.
@@ -287,7 +298,7 @@ fn remote(addr: SocketAddr, target: &Status, key: &[u8; 32], opts: &RunOpts, me:
         }
     };
     if target.arch != me.arch && !pull.is_empty() {
-        note(&format!("attention : {} est en {}, cette machine en {} ; les fichiers compilés rapatriés par --pull ne s'exécuteront pas ici", target.name, target.arch, me.arch));
+        note(&format!("attention : {} est en {}, cette machine en {} ; les fichiers compilés rapatriés par --pull ne s'exécuteront pas ici", target.name, target.arch, me.arch));
     }
     rec.remote = true;
     rec.target = target.name.clone();

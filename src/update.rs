@@ -44,7 +44,7 @@ fn fetch(url: &str) -> Result<Vec<u8>> {
         .output()
         .context("curl introuvable")?;
     if !out.status.success() {
-        bail!("{url} : {}", String::from_utf8_lossy(&out.stderr).trim());
+        bail!("{url} : {}", String::from_utf8_lossy(&out.stderr).trim());
     }
     Ok(out.stdout)
 }
@@ -64,7 +64,7 @@ pub fn check() -> Result<Option<Release>> {
     let body = fetch(&format!("{}/version.txt", base())).map_err(|e| anyhow!("{e} (le dépôt doit être public et avoir au moins une version publiée)"))?;
     let tag = String::from_utf8_lossy(&body).trim().to_string();
     let tag = tag.as_str();
-    let latest = parse(tag).ok_or_else(|| anyhow!("numéro de version illisible : {tag}"))?;
+    let latest = parse(tag).ok_or_else(|| anyhow!("numéro de version illisible : {tag}"))?;
     let current = parse(env!("CARGO_PKG_VERSION")).unwrap();
     Ok((latest > current).then(|| Release { version: tag.trim_start_matches('v').to_string() }))
 }
@@ -77,7 +77,7 @@ pub fn install(release: &Release) -> Result<()> {
     let expected = expected.split_whitespace().next().unwrap_or_default().to_lowercase();
     let actual = hex::encode(Sha256::digest(&binary));
     if expected != actual {
-        bail!("empreinte incorrecte pour {} : fichier refusé", asset());
+        bail!("empreinte incorrecte pour {} : fichier refusé", asset());
     }
     let tmp = std::env::temp_dir().join(format!("echoes-update-{}", std::process::id()));
     std::fs::write(&tmp, &binary)?;
@@ -91,7 +91,7 @@ pub fn install(release: &Release) -> Result<()> {
     let starts = matches!(&trial, Ok(o) if o.status.success() && String::from_utf8_lossy(&o.stdout).contains(&release.version));
     if !starts {
         let _ = std::fs::remove_file(&tmp);
-        bail!("la version {} ne démarre pas sur cette machine : mise à jour abandonnée, version actuelle conservée", release.version);
+        bail!("la version {} ne démarre pas sur cette machine : mise à jour abandonnée, la version actuelle est conservée", release.version);
     }
     // Copie de secours de la version actuelle (`echoes.prev`, à côté du programme).
     if let Some(exe) = EXE.get().cloned().or_else(|| std::env::current_exe().ok()) {
@@ -110,7 +110,7 @@ pub fn restart() -> ! {
     {
         use std::os::unix::process::CommandExt;
         let err = Command::new(&exe).args(&args).exec();
-        eprintln!("echoes: redémarrage impossible : {err}");
+        eprintln!("echoes: redémarrage impossible : {err}");
         std::process::exit(1);
     }
     #[cfg(not(unix))]
@@ -121,13 +121,13 @@ pub fn restart() -> ! {
 }
 
 pub fn run_cli(check_only: bool) -> Result<()> {
-    println!("Version installée : {} ({TARGET})", env!("CARGO_PKG_VERSION"));
+    println!("Version installée : {} ({TARGET})", env!("CARGO_PKG_VERSION"));
     match check()? {
-        None => println!("Déjà à jour."),
-        Some(r) if check_only => println!("Nouvelle version disponible : {}", r.version),
+        None => println!("Déjà à jour"),
+        Some(r) if check_only => println!("Nouvelle version disponible : {}", r.version),
         Some(r) => {
             install(&r)?;
-            println!("Mis à jour vers {}.", r.version);
+            println!("Mis à jour vers {}", r.version);
         }
     }
     Ok(())
