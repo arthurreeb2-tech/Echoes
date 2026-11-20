@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 fn dir(base: Option<PathBuf>) -> Result<PathBuf> {
-    let d = base.ok_or_else(|| anyhow!("dossier utilisateur introuvable"))?.join("echoes");
+    let d = base.ok_or_else(|| anyhow!("dossier de configuration de l'utilisateur introuvable"))?.join("echoes");
     fs::create_dir_all(&d)?;
     #[cfg(unix)]
     {
@@ -52,8 +52,8 @@ pub fn save_key(key: &[u8; 32]) -> Result<()> {
 }
 
 pub fn parse_key(code: &str) -> Result<[u8; 32]> {
-    let raw = hex::decode(code.trim().replace(['-', ' '], "")).context("code d'appairage invalide")?;
-    raw.try_into().map_err(|_| anyhow!("code d'appairage invalide (64 caractères attendus)"))
+    let raw = hex::decode(code.trim().replace(['-', ' '], "")).context("code d'appairage invalide (chiffres 0-9 et lettres a-f uniquement)")?;
+    raw.try_into().map_err(|_| anyhow!("code d'appairage invalide (64 chiffres hexadécimaux attendus)"))
 }
 
 pub fn load_key() -> Result<Option<[u8; 32]>> {
@@ -65,7 +65,7 @@ pub fn load_key() -> Result<Option<[u8; 32]>> {
 }
 
 pub fn require_key() -> Result<[u8; 32]> {
-    load_key()?.ok_or_else(|| anyhow!("aucune clé d'appairage : lance `echoes pair` sur cette machine"))
+    load_key()?.ok_or_else(|| anyhow!("aucune clé d'appairage sur cette machine : lance `echoes pair` (ou `echoes pair <code>` pour rejoindre les autres)"))
 }
 
 /// Identifiant stable de cette machine (pour ne pas se déléguer à soi-même).

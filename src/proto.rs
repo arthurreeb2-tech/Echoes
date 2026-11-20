@@ -85,7 +85,7 @@ impl Status {
     pub fn load_note(&self) -> String {
         let mut parts = vec![format!("{:.1} cœurs libres", self.free)];
         if let Some(g) = self.gpu {
-            parts.push(format!("carte graphique {g:.0} %"));
+            parts.push(format!("carte graphique {g:.0} %"));
         }
         if self.mem_free_gb < 2.0 {
             parts.push(format!("{:.1} Go de mémoire libre", self.mem_free_gb));
@@ -135,18 +135,18 @@ impl Secure {
         let mut hs = snow::Builder::new(NOISE.parse()?).psk(0, key)?.build_responder()?;
         let mut buf = [0u8; 1024];
         let first = read_frame(&stream)?;
-        hs.read_message(&first, &mut buf).map_err(|_| anyhow!("clé invalide"))?;
+        hs.read_message(&first, &mut buf).map_err(|_| anyhow!("clé d'appairage différente de celle de l'autre machine"))?;
         let n = hs.write_message(&[], &mut buf)?;
         write_frame(&stream, &buf[..n])?;
         let mut s = Secure { stream, noise: hs.into_transport_mode()?, last_send: std::time::Instant::now() };
         match s.recv()? {
             Msg::Hello { version } if version == VERSION => Ok(s),
             Msg::Hello { version } => {
-                let m = format!("version de protocole {version}, attendu {VERSION} : mets Echoes à jour des deux côtés");
+                let m = format!("version de protocole {version}, attendu {VERSION} : mets Echoes à jour sur les deux machines");
                 let _ = s.send(&Msg::Error(m.clone()));
                 bail!(m)
             }
-            _ => bail!("premier message inattendu"),
+            _ => bail!("premier message inattendu (Hello attendu)"),
         }
     }
 
@@ -186,19 +186,19 @@ impl Secure {
         let mut plain = vec![0u8; 65535];
         loop {
             let frame = read_frame(&self.stream)?;
-            let n = self.noise.read_message(&frame, &mut plain).map_err(|_| anyhow!("message corrompu"))?;
+            let n = self.noise.read_message(&frame, &mut plain).map_err(|_| anyhow!("message chiffré illisible (clé différente ou données altérées)"))?;
             if n == 0 {
-                bail!("trame vide");
+                bail!("trame vide reçue");
             }
             bytes.extend_from_slice(&plain[1..n]);
             if bytes.len() > MAX_MSG {
-                bail!("message trop gros");
+                bail!("message trop volumineux (plus de 64 Mo)");
             }
             if plain[0] == 1 {
                 break;
             }
         }
-        bincode::deserialize(&bytes).context("message illisible")
+        bincode::deserialize(&bytes).context("message illisible (format inattendu)")
     }
 }
 

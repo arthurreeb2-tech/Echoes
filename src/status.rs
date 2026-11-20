@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use sysinfo::System;
 
+const GB: f64 = (1u64 << 30) as f64;
+
 /// Petit calcul chronométré, mis en cache : sert à comparer les machines.
 fn bench() -> f64 {
     let path = config::data_dir().ok().map(|d| d.join("bench"));
@@ -64,8 +66,6 @@ fn fixed() -> Result<Status> {
     })
 }
 
-const GB: f64 = (1u64 << 30) as f64;
-
 fn free_cores(sys: &System) -> f64 {
     sys.cpus().len() as f64 * (1.0 - sys.global_cpu_usage() as f64 / 100.0)
 }
@@ -101,7 +101,7 @@ fn parse_lines(text: &str) -> Option<f32> {
 
 /// Occupation de la carte graphique en %, ou `None` si elle n'est pas mesurable sur cette machine.
 pub fn gpu_percent() -> Option<f32> {
-    // Pour les tests : simule une carte graphique occupée.
+    // Simule une carte graphique occupée.
     if let Some(v) = std::env::var("ECHOES_FAKE_GPU").ok().and_then(|v| v.parse::<f32>().ok()) {
         return Some(v.clamp(0.0, 100.0));
     }
