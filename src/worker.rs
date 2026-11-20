@@ -94,7 +94,7 @@ fn auto_update() {
         match update::check() {
             Ok(Some(release)) => loop {
                 UPDATING.store(true, Ordering::SeqCst);
-                if ACTIVE.load(Ordering::SeqCst) == 0 {
+                if can_update(ACTIVE.load(Ordering::SeqCst)) {
                     match update::install(&release) {
                         Ok(()) => {
                             eprintln!("echoes: mise à jour vers {} installée, redémarrage", release.version);
@@ -136,11 +136,8 @@ fn handle(stream: TcpStream, state: Arc<Mutex<Status>>) -> Result<()> {
         Msg::Run { project, name, manifest, cwd, command, pull } => {
             let st = snapshot();
             // Admission : on ne sature pas une machine déjà prise par son propre travail.
-            if UPDATING.load(Ordering::SeqCst) {
-                return conn.send(&Msg::Error("mise à jour en cours".into()));
-            }
-            if st.jobs >= st.max_jobs() {
-                return conn.send(&Msg::Error(format!("occupée ({} tâche(s) en cours, {})", st.jobs, st.load_note())));
+            if let Err(reason) = admit(&st, UPDATING.load(Ordering::SeqCst)) {
+                return conn.send(&Msg::Error(reason));
             }
             let _job = Count::new(&ACTIVE);
             let result = run(&mut conn, &project, &name, manifest, &cwd, command, pull, &st);
@@ -153,14 +150,35 @@ fn handle(stream: TcpStream, state: Arc<Mutex<Status>>) -> Result<()> {
     }
 }
 
+/// Admission d'une tâche : refus (avec la raison) pendant une mise à jour ou quand la machine est pleine.
+fn admit(st: &Status, updating: bool) -> Result<(), String> {
+    if updating {
+        return Err("mise à jour en cours".into());
+    }
+    if st.jobs >= st.max_jobs() {
+        return Err(format!("occupée ({} tâche(s) en cours, {})", st.jobs, st.load_note()));
+    }
+    Ok(())
+}
+
+/// Le programme ne se remplace que lorsqu'aucune tâche ne tourne.
+fn can_update(active_jobs: usize) -> bool {
+    active_jobs == 0
+}
+
 /// Réserve le dossier de travail d'un projet ; libéré quand la valeur disparaît.
 struct WsLock(String);
 impl WsLock {
+    /// `None` si une autre tâche tient déjà ce projet.
+    fn try_acquire(tag: &str) -> Option<Self> {
+        BUSY_WS.lock().unwrap().get_or_insert_with(HashSet::new).insert(tag.to_string()).then(|| WsLock(tag.to_string()))
+    }
+
     /// Attend son tour si une autre tâche du même projet tourne, en donnant signe de vie.
     fn acquire(tag: &str, conn: &mut Secure) -> Result<Self> {
         loop {
-            if BUSY_WS.lock().unwrap().get_or_insert_with(HashSet::new).insert(tag.to_string()) {
-                return Ok(WsLock(tag.to_string()));
+            if let Some(lock) = Self::try_acquire(tag) {
+                return Ok(lock);
             }
             conn.keepalive()?;
             std::thread::sleep(Duration::from_millis(300));
@@ -371,4 +389,89 @@ fn execute(conn: &mut Secure, dir: &Path, command: &[String], st: &Status) -> Re
         None => child.wait()?,
     };
     Ok(exit_code(status))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn status(cores: u32, gpu: Option<f32>, mem_free_gb: f64, jobs: u32) -> Status {
+        Status { id: "id".into(), name: "m".into(), os: "linux".into(), arch: "x86_64".into(), cores, bench: 1.0, free: cores as f64, mem_gb: 16.0, version: "0".into(), gpu, mem_free_gb, jobs }
+    }
+
+    #[test]
+    fn admits_until_the_job_limit() {
+        // 8 cœurs : 2 tâches en parallèle.
+        assert!(admit(&status(8, None, 8.0, 0), false).is_ok());
+        assert!(admit(&status(8, None, 8.0, 1), false).is_ok());
+        let refused = admit(&status(8, None, 8.0, 2), false).unwrap_err();
+        assert!(refused.starts_with("occupée (2 tâche(s) en cours"), "{refused}");
+    }
+
+    #[test]
+    fn small_machine_takes_one_job() {
+        assert!(admit(&status(2, None, 8.0, 0), false).is_ok());
+        assert!(admit(&status(2, None, 8.0, 1), false).is_err());
+    }
+
+    #[test]
+    fn busy_machine_takes_one_job_only() {
+        let gpu_busy = status(16, Some(80.0), 8.0, 1);
+        assert!(admit(&gpu_busy, false).is_err());
+        let low_memory = status(16, None, 0.5, 1);
+        assert!(admit(&low_memory, false).is_err());
+        assert!(admit(&status(16, Some(80.0), 8.0, 0), false).is_ok());
+    }
+
+    #[test]
+    fn refuses_during_update() {
+        assert_eq!(admit(&status(8, None, 8.0, 0), true).unwrap_err(), "mise à jour en cours");
+    }
+
+    #[test]
+    fn throttles_only_when_busy() {
+        assert_eq!(limited_jobs(&status(8, None, 8.0, 0)), None);
+        assert_eq!(limited_jobs(&status(8, Some(90.0), 8.0, 0)), Some(4));
+        assert_eq!(limited_jobs(&status(8, None, 0.2, 0)), Some(4));
+        assert_eq!(limited_jobs(&status(1, Some(90.0), 8.0, 0)), Some(1));
+        assert_eq!(limited_jobs(&status(0, Some(90.0), 8.0, 0)), Some(1));
+    }
+
+    #[test]
+    fn update_only_when_no_job_runs() {
+        assert!(can_update(0));
+        assert!(!can_update(1));
+        assert!(!can_update(5));
+    }
+
+    #[test]
+    fn one_task_at_a_time_per_project() {
+        let first = WsLock::try_acquire("test-projet-a").expect("libre");
+        assert!(WsLock::try_acquire("test-projet-a").is_none());
+        let other = WsLock::try_acquire("test-projet-b").expect("autre projet libre");
+        drop(first);
+        let again = WsLock::try_acquire("test-projet-a").expect("libéré");
+        drop((other, again));
+        assert!(WsLock::try_acquire("test-projet-b").is_some());
+    }
+
+    #[test]
+    fn counter_guard_counts_and_releases() {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let a = Count::new(&N);
+        let b = Count::new(&N);
+        assert_eq!(N.load(Ordering::SeqCst), 2);
+        drop(a);
+        assert_eq!(N.load(Ordering::SeqCst), 1);
+        drop(b);
+        assert_eq!(N.load(Ordering::SeqCst), 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exit_code_follows_shell_convention() {
+        let run = |script: &str| Command::new("sh").args(["-c", script]).status().unwrap();
+        assert_eq!(exit_code(run("exit 7")), 7);
+        assert_eq!(exit_code(run("kill -9 $$")), 137);
+    }
 }
