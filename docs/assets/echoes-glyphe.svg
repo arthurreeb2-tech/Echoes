@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Echoes</title>
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232A38"/>
+      <stop offset="1" stop-color="#0B0E14"/>
+    </linearGradient>
+    <radialGradient id="chaleur" cx="0.5" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#D9673A" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#D9673A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="onde" x1="0.15" y1="0.9" x2="0.85" y2="0.1">
+      <stop offset="0" stop-color="#B8522A"/>
+      <stop offset="0.55" stop-color="#EE8550"/>
+      <stop offset="1" stop-color="#FFB574"/>
+    </linearGradient>
+    <radialGradient id="coeur" cx="0.38" cy="0.34" r="0.75">
+      <stop offset="0" stop-color="#FFE9D2"/>
+      <stop offset="0.45" stop-color="#FFB574"/>
+      <stop offset="1" stop-color="#D9673A"/>
+    </radialGradient>
+    <radialGradient id="halo">
+      <stop offset="0.4" stop-color="#FFB574" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FFB574" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="reflet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="ombre" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <path d="M347.3,238.3 A93.0,93.0 0 1 1 273.7,164.7" fill="none" stroke="url(#onde)" stroke-width="28.5" stroke-linecap="round" opacity="1.0"/>
+  <path d="M398.5,217.8 A147.56,147.56 0 1 1 294.2,113.5" fill="none" stroke="url(#onde)" stroke-width="22.3" stroke-linecap="round" opacity="0.78"/>
+  <path d="M444.8,191.0 A199.64,199.64 0 1 1 321.0,67.2" fill="none" stroke="url(#onde)" stroke-width="16.1" stroke-linecap="round" opacity="0.52"/>
+  <circle cx="414.7" cy="97.3" r="18.6" fill="url(#coeur)"/>
+  <circle cx="256" cy="256" r="74.4" fill="url(#halo)"/>
+  <circle cx="256" cy="256" r="38.4" fill="url(#coeur)"/>
+</svg>
