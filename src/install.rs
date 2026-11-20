@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 const LABEL: &str = "io.echoes.serve";
 const MARK_BEGIN: &str = "<!-- echoes:begin -->";
 const MARK_END: &str = "<!-- echoes:end -->";
@@ -88,11 +88,11 @@ pub fn run(code: Option<String>, open: bool) -> Result<()> {
     // 4. Consigne globale pour Claude Code.
     let claude = claude_instructions(true)?;
 
-    println!("Echoes {} est installé : {}", env!("CARGO_PKG_VERSION"), dest.display());
+    println!("Echoes {} est installé : {}", env!("CARGO_PKG_VERSION"), dest.display());
     if active {
-        println!("Service actif, lancé automatiquement à chaque ouverture de session, mis à jour automatiquement.");
+        println!("Service actif, lancé à chaque ouverture de session et mis à jour automatiquement.");
     } else if !cfg!(target_os = "macos") {
-        println!("Démarrage automatique indisponible ici : lance `echoes serve` toi-même pour prêter cette machine.");
+        println!("Démarrage automatique indisponible ici : lance `echoes serve` toi-même pour prêter cette machine.");
     }
     if let Some(note) = path_note {
         println!("{note}");
@@ -102,10 +102,10 @@ pub fn run(code: Option<String>, open: bool) -> Result<()> {
     }
     firewall_hint();
     if let Some(code) = new_code {
-        println!("\nPremière machine : sur chacune des autres, installe Echoes avec ce code :\n\n  {code}\n");
-        println!("Ce code donne le droit d'exécuter des commandes sur tes machines : ne le partage avec personne.");
+        println!("\nPremière machine : sur chacune des autres, installe Echoes avec ce code :\n\n  {code}\n");
+        println!("Ce code donne le droit d'exécuter des commandes sur tes machines : ne le partage avec personne.");
     }
-    println!("Tableau de bord : `echoes dashboard`.");
+    println!("Tableau de bord : `echoes dashboard`.");
     if open && active {
         crate::dashboard::open(true)?;
     }
@@ -160,14 +160,16 @@ fn domains() -> [String; 2] {
     [format!("gui/{uid}"), format!("user/{uid}")]
 }
 
-#[cfg(target_os = "macos")]
-fn start_service(bin: &Path) -> Result<bool> {
-    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-    let path = std::env::var("PATH").unwrap_or_default();
-    let path = format!("{}:{path}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin", bin_dir()?.display());
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let log = home()?.join("Library/Logs/echoes.log");
-    let plist = format!(
+#[cfg(any(target_os = "macos", test))]
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// Contenu de l'agent launchd : lance `bin serve` à l'ouverture de session et le relance s'il s'arrête.
+#[cfg(any(target_os = "macos", test))]
+fn launchd_plist(bin: &Path, path: &str, shell: &str, log: &Path) -> String {
+    let log = xml_escape(&log.display().to_string());
+    format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -186,12 +188,21 @@ fn start_service(bin: &Path) -> Result<bool> {
 </dict>
 </plist>
 "#,
-        esc(&bin.display().to_string()),
-        esc(&path),
-        esc(&shell),
-        esc(&log.display().to_string()),
-        esc(&log.display().to_string()),
-    );
+        xml_escape(&bin.display().to_string()),
+        xml_escape(path),
+        xml_escape(shell),
+        log,
+        log,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn start_service(bin: &Path) -> Result<bool> {
+    let path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{path}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin", bin_dir()?.display());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    let log = home()?.join("Library/Logs/echoes.log");
+    let plist = launchd_plist(bin, &path, &shell, &log);
     let file = plist_path()?;
     fs::create_dir_all(file.parent().unwrap())?;
     fs::write(&file, plist)?;
@@ -205,7 +216,7 @@ fn start_service(bin: &Path) -> Result<bool> {
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    println!("Le service n'a pas pu démarrer maintenant (aucune session ouverte sur ce Mac ?). Il démarrera à la prochaine ouverture de session ; journal : {}", log.display());
+    println!("Le service n'a pas pu démarrer maintenant (aucune session ouverte sur ce Mac ?). Il démarrera à la prochaine ouverture de session ; journal : {}", log.display());
     Ok(false)
 }
 
@@ -227,7 +238,7 @@ fn firewall_hint() {
     let out = Command::new("/usr/libexec/ApplicationFirewall/socketfilterfw").arg("--getglobalstate").output();
     if let Ok(o) = out {
         if String::from_utf8_lossy(&o.stdout).contains("enabled") {
-            println!("Le pare-feu macOS est actif : s'il demande d'autoriser « echoes » à recevoir des connexions, accepte.");
+            println!("Le pare-feu macOS est actif : s'il demande d'autoriser « echoes » à recevoir des connexions, accepte.");
         }
     }
 }
@@ -239,14 +250,21 @@ fn unit_path() -> Result<PathBuf> {
     Ok(dirs::config_dir().ok_or_else(|| anyhow!("dossier de configuration introuvable"))?.join("systemd/user/echoes.service"))
 }
 
+/// Unité systemd utilisateur. Le chemin du programme est mis entre guillemets s'il contient un espace.
+#[cfg(any(target_os = "linux", test))]
+fn systemd_unit(bin: &Path, path: &str, shell: &str) -> String {
+    let bin = bin.display().to_string();
+    let exec = if bin.contains(char::is_whitespace) { format!("\"{bin}\"") } else { bin };
+    format!(
+        "[Unit]\nDescription=Echoes\nAfter=network-online.target\n\n[Service]\nExecStart={exec} serve\nRestart=always\nRestartSec=5\nEnvironment=\"PATH={path}\"\nEnvironment=\"SHELL={shell}\"\n\n[Install]\nWantedBy=default.target\n"
+    )
+}
+
 #[cfg(target_os = "linux")]
 fn start_service(bin: &Path) -> Result<bool> {
     let path = format!("{}:{}", bin_dir()?.display(), std::env::var("PATH").unwrap_or_default());
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-    let unit = format!(
-        "[Unit]\nDescription=Echoes\nAfter=network-online.target\n\n[Service]\nExecStart={} serve\nRestart=always\nRestartSec=5\nEnvironment=\"PATH={path}\"\nEnvironment=\"SHELL={shell}\"\n\n[Install]\nWantedBy=default.target\n",
-        bin.display()
-    );
+    let unit = systemd_unit(bin, &path, &shell);
     let file = unit_path()?;
     fs::create_dir_all(file.parent().unwrap())?;
     fs::write(&file, unit)?;
@@ -272,10 +290,15 @@ fn firewall_hint() {}
 
 // ---------- Windows : tâche planifiée à l'ouverture de session ----------
 
+/// Commande de la tâche planifiée ; `conhost --headless` évite la fenêtre de console.
+#[cfg(any(windows, test))]
+fn windows_task_action(bin: &Path) -> String {
+    format!("conhost.exe --headless \"{}\" serve", bin.display())
+}
+
 #[cfg(windows)]
 fn start_service(bin: &Path) -> Result<bool> {
-    // conhost --headless : pas de fenêtre de console visible.
-    let action = format!("conhost.exe --headless \"{}\" serve", bin.display());
+    let action = windows_task_action(bin);
     let ok = Command::new("schtasks").args(["/Create", "/F", "/SC", "ONLOGON", "/RL", "LIMITED", "/TN", "Echoes", "/TR", &action]).status()?.success();
     if !ok {
         anyhow::bail!("création de la tâche planifiée impossible");
@@ -307,7 +330,7 @@ fn remove_service_files() -> Result<()> {
 
 #[cfg(windows)]
 fn firewall_hint() {
-    println!("Si le pare-feu Windows demande d'autoriser « echoes » sur les réseaux privés, accepte.");
+    println!("Si le pare-feu Windows demande d'autoriser « echoes » sur les réseaux privés, accepte.");
 }
 
 // ---------- PATH ----------
@@ -326,25 +349,36 @@ fn ensure_path() -> Result<Option<String>> {
         quiet(Command::new("powershell").args(["-NoProfile", "-Command", &ps]));
         return Ok(Some("Ouvre un nouveau terminal pour utiliser la commande `echoes`.".into()));
     }
-    let shell = std::env::var("SHELL").unwrap_or_default();
-    let rc = home()?.join(if shell.ends_with("zsh") {
+    let rc = home()?.join(profile_name(&std::env::var("SHELL").unwrap_or_default(), cfg!(target_os = "macos")));
+    add_path_line(&rc)?;
+    Ok(Some(format!("Chemin ajouté dans {} : ouvre un nouveau terminal pour utiliser la commande `echoes`.", rc.display())))
+}
+
+const PATH_LINE: &str = "export PATH=\"$HOME/.local/bin:$PATH\"  # echoes";
+
+/// Fichier de profil du shell où ajouter le dossier du programme au PATH.
+fn profile_name(shell: &str, macos: bool) -> &'static str {
+    if shell.ends_with("zsh") {
         ".zshrc"
-    } else if shell.ends_with("bash") && cfg!(target_os = "macos") {
+    } else if shell.ends_with("bash") && macos {
         ".bash_profile"
     } else if shell.ends_with("bash") {
         ".bashrc"
-    } else if cfg!(target_os = "macos") {
+    } else if macos {
         // Lancée depuis le Finder, l'app ne connaît pas toujours le shell : zsh est celui de macOS.
         ".zshrc"
     } else {
         ".profile"
-    });
-    let line = "export PATH=\"$HOME/.local/bin:$PATH\"  # echoes";
-    let current = fs::read_to_string(&rc).unwrap_or_default();
-    if !current.contains(line) {
-        fs::write(&rc, format!("{current}{}{line}\n", if current.is_empty() || current.ends_with('\n') { "" } else { "\n" }))?;
     }
-    Ok(Some(format!("Chemin ajouté dans {} : ouvre un nouveau terminal pour utiliser la commande `echoes`.", rc.display())))
+}
+
+/// Ajoute la ligne du PATH à la fin du profil, une seule fois.
+fn add_path_line(rc: &Path) -> Result<()> {
+    let current = fs::read_to_string(rc).unwrap_or_default();
+    if !current.contains(PATH_LINE) {
+        fs::write(rc, format!("{current}{}{PATH_LINE}\n", if current.is_empty() || current.ends_with('\n') { "" } else { "\n" }))?;
+    }
+    Ok(())
 }
 
 // ---------- Claude Code ----------
@@ -361,7 +395,12 @@ Echoes est installé sur cette machine : il exécute une commande sur la machine
 ";
 
 fn claude_instructions(add: bool) -> Result<bool> {
-    let dir = home()?.join(".claude");
+    claude_instructions_in(&home()?.join(".claude"), add)
+}
+
+/// Ajoute (ou retire) le bloc Echoes de `dir/CLAUDE.md`, sans toucher au reste du fichier.
+/// Sans dossier `.claude`, Claude Code n'est pas utilisé ici : rien n'est créé.
+fn claude_instructions_in(dir: &Path, add: bool) -> Result<bool> {
     if add && !dir.exists() {
         return Ok(false);
     }
@@ -387,4 +426,157 @@ fn claude_instructions(add: bool) -> Result<bool> {
         fs::write(&file, next)?;
     }
     Ok(add)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Dossier temporaire unique, supprimé à la fin du test.
+    struct Tmp(PathBuf);
+    impl Tmp {
+        fn new(name: &str) -> Tmp {
+            let dir = std::env::temp_dir().join(format!("echoes-install-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Tmp(dir)
+        }
+    }
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn plist_runs_serve_with_right_binary() {
+        let plist = launchd_plist(Path::new("/Users/a/.local/bin/echoes"), "/a:/b", "/bin/zsh", Path::new("/Users/a/Library/Logs/echoes.log"));
+        assert!(plist.starts_with("<?xml"));
+        assert!(plist.contains("<string>/Users/a/.local/bin/echoes</string><string>serve</string>"));
+        assert!(plist.contains("<key>KeepAlive</key><true/>") && plist.contains("<key>RunAtLoad</key><true/>"));
+        assert!(plist.contains("<key>PATH</key><string>/a:/b</string>"));
+        assert!(plist.contains("<key>SHELL</key><string>/bin/zsh</string>"));
+        assert_eq!(plist.matches("<string>/Users/a/Library/Logs/echoes.log</string>").count(), 2);
+    }
+
+    #[test]
+    fn plist_escapes_spaces_and_xml_characters() {
+        let plist = launchd_plist(Path::new("/Users/A & B/<bin>/echoes"), "/x y:/p&q", "/bin/a>b", Path::new("/Users/A & B/log.log"));
+        assert!(plist.contains("<string>/Users/A &amp; B/&lt;bin&gt;/echoes</string><string>serve</string>"));
+        assert!(plist.contains("<string>/x y:/p&amp;q</string>"));
+        assert!(plist.contains("<string>/bin/a&gt;b</string>"));
+        assert!(plist.contains("<string>/Users/A &amp; B/log.log</string>"));
+        // Plus aucun caractère spécial brut dans les valeurs.
+        assert!(!plist.contains("A & B"));
+        assert!(!plist.contains("<bin>"));
+    }
+
+    #[test]
+    fn systemd_unit_has_exec_and_environment() {
+        let unit = systemd_unit(Path::new("/home/a/.local/bin/echoes"), "/home/a/.local/bin:/usr/bin", "/bin/bash");
+        assert!(unit.contains("\nExecStart=/home/a/.local/bin/echoes serve\n"));
+        assert!(unit.contains("\nRestart=always\n"));
+        assert!(unit.contains("Environment=\"PATH=/home/a/.local/bin:/usr/bin\"\n"));
+        assert!(unit.contains("Environment=\"SHELL=/bin/bash\"\n"));
+        assert!(unit.contains("[Install]\nWantedBy=default.target\n"));
+    }
+
+    #[test]
+    fn systemd_unit_quotes_path_with_spaces() {
+        let unit = systemd_unit(Path::new("/home/jean dupont/.local/bin/echoes"), "/usr/bin", "/bin/sh");
+        assert!(unit.contains("\nExecStart=\"/home/jean dupont/.local/bin/echoes\" serve\n"), "{unit}");
+    }
+
+    #[test]
+    fn windows_task_runs_headless_serve() {
+        assert_eq!(
+            windows_task_action(Path::new(r"C:\Users\Jean Dupont\AppData\Local\Programs\Echoes\echoes.exe")),
+            r#"conhost.exe --headless "C:\Users\Jean Dupont\AppData\Local\Programs\Echoes\echoes.exe" serve"#
+        );
+    }
+
+    #[test]
+    fn profile_follows_shell_and_system() {
+        assert_eq!(profile_name("/bin/zsh", false), ".zshrc");
+        assert_eq!(profile_name("/bin/zsh", true), ".zshrc");
+        assert_eq!(profile_name("/bin/bash", true), ".bash_profile");
+        assert_eq!(profile_name("/usr/bin/bash", false), ".bashrc");
+        assert_eq!(profile_name("", true), ".zshrc");
+        assert_eq!(profile_name("/usr/bin/fish", false), ".profile");
+    }
+
+    #[test]
+    fn path_line_is_added_once() {
+        let tmp = Tmp::new("path");
+        let rc = tmp.0.join(".zshrc");
+        add_path_line(&rc).unwrap();
+        add_path_line(&rc).unwrap();
+        let text = fs::read_to_string(&rc).unwrap();
+        assert_eq!(text, format!("{PATH_LINE}\n"));
+    }
+
+    #[test]
+    fn path_line_keeps_existing_profile() {
+        let tmp = Tmp::new("path-keep");
+        let rc = tmp.0.join(".bashrc");
+        fs::write(&rc, "alias ll='ls -l'").unwrap();
+        add_path_line(&rc).unwrap();
+        add_path_line(&rc).unwrap();
+        let text = fs::read_to_string(&rc).unwrap();
+        assert_eq!(text, format!("alias ll='ls -l'\n{PATH_LINE}\n"));
+        assert_eq!(text.matches("# echoes").count(), 1);
+    }
+
+    #[test]
+    fn claude_block_is_not_created_without_claude_dir() {
+        let tmp = Tmp::new("claude-none");
+        let dir = tmp.0.join(".claude");
+        assert!(!claude_instructions_in(&dir, true).unwrap());
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn claude_block_is_idempotent_and_keeps_user_text() {
+        let tmp = Tmp::new("claude-add");
+        let dir = tmp.0.join(".claude");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("CLAUDE.md");
+        fs::write(&file, "# Mes règles\n\nRépondre en français.\n").unwrap();
+        assert!(claude_instructions_in(&dir, true).unwrap());
+        let once = fs::read_to_string(&file).unwrap();
+        assert!(once.starts_with("# Mes règles\n\nRépondre en français.\n\n"));
+        assert!(once.contains(MARK_BEGIN) && once.contains("echoes run --") && once.ends_with(&format!("{MARK_END}\n")));
+        // Deuxième installation : fichier identique, un seul bloc.
+        assert!(claude_instructions_in(&dir, true).unwrap());
+        let twice = fs::read_to_string(&file).unwrap();
+        assert_eq!(once, twice);
+        assert_eq!(twice.matches(MARK_BEGIN).count(), 1);
+    }
+
+    #[test]
+    fn claude_block_is_replaced_in_place_and_removed_cleanly() {
+        let tmp = Tmp::new("claude-remove");
+        let dir = tmp.0.join(".claude");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("CLAUDE.md");
+        fs::write(&file, format!("avant\n\n{MARK_BEGIN}\nancien bloc\n{MARK_END}\n")).unwrap();
+        claude_instructions_in(&dir, true).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(!text.contains("ancien bloc") && text.contains("délégation de calcul") && text.starts_with("avant\n\n"));
+        // Retrait : il ne reste que le texte de l'utilisateur.
+        assert!(!claude_instructions_in(&dir, false).unwrap());
+        assert_eq!(fs::read_to_string(&file).unwrap(), "avant\n");
+        // Retirer deux fois ne change rien.
+        claude_instructions_in(&dir, false).unwrap();
+        assert_eq!(fs::read_to_string(&file).unwrap(), "avant\n");
+    }
+
+    #[test]
+    fn claude_block_removal_without_file_creates_nothing_useful() {
+        let tmp = Tmp::new("claude-nofile");
+        let dir = tmp.0.join(".claude");
+        fs::create_dir_all(&dir).unwrap();
+        claude_instructions_in(&dir, false).unwrap();
+        assert!(!dir.join("CLAUDE.md").exists());
+    }
 }
