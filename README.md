@@ -89,7 +89,7 @@ echoes update                                     # mise à jour immédiate
 
 ## Mises à jour automatiques
 
-Le service vérifie toutes les 6 heures s'il existe une version plus récente parmi les versions publiées sur GitHub (dépôt [Echoes-Maj](https://github.com/arthurreeb2-tech/Echoes-Maj), avec ce dépôt-ci en secours : la plus récente des deux l'emporte), la télécharge, vérifie son empreinte SHA-256, s'assure qu'elle démarre sur cette machine, puis se relance avec elle, uniquement quand aucune tâche ne tourne. La version précédente est gardée à côté du programme (`echoes.prev`). `ECHOES_NO_UPDATE=1` désactive ce mécanisme.
+Le service vérifie toutes les 6 heures s'il existe une version plus récente parmi les versions publiées sur GitHub (dépôt [Echoes-Maj](https://github.com/arthurreeb2-tech/Echoes-Maj), avec ce dépôt-ci en secours : la plus récente des deux l'emporte), la télécharge, vérifie son empreinte SHA-256, s'assure qu'elle démarre sur cette machine, puis se relance avec elle, uniquement quand aucune tâche ne tourne. La version précédente est gardée à côté du programme (`echoes.prev`). `ECHOES_NO_UPDATE=1` désactive ce mécanisme.
 
 Publier une version : augmenter `version` dans `Cargo.toml` sur `main`. Le workflow `release.yml` compile pour macOS (Apple Silicon et Intel), Linux et Windows et publie la version ici ; Echoes-Maj la recopie de lui-même dans l'heure, après contrôle des empreintes. Les machines la récupèrent d'elles-mêmes. Cela suppose que les deux dépôts soient **publics**.
 
