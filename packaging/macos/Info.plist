@@ -9,6 +9,9 @@
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>__VERSION__</string>
   <key>CFBundleVersion</key><string>__VERSION__</string>
+  <!-- Icône (Finder, Launchpad, Applications) : Contents/Resources/Echoes.icns, rendue depuis brand/. -->
+  <key>CFBundleIconFile</key><string>Echoes</string>
+  <key>CFBundleIconName</key><string>Echoes</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <!-- Pas d'icône dans le Dock : l'app ne fait qu'ouvrir le tableau de bord. -->
   <key>LSUIElement</key><true/>
