@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn bases_follow_override_variable() {
-        // Seul test à toucher cette variable.
+        let _guard = crate::config::test_support::env_lock();
         std::env::set_var("ECHOES_UPDATE_URL", "file:///a  file:///b");
         assert_eq!(bases(), ["file:///a", "file:///b"]);
         std::env::remove_var("ECHOES_UPDATE_URL");
