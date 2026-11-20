@@ -49,7 +49,8 @@ Ne jamais affaiblir la sécurité : clé d'appairage, chiffrement Noise, refus d
 - `src/status.rs` : mesures (cœurs libres, carte graphique, mémoire). La formule de puissance disponible est dans `Status::score` (`src/proto.rs`) ; `ECHOES_FAKE_GPU=<0-100>` simule une carte graphique occupée pour les tests.
 - `src/proto.rs` : messages et canal chiffré. `src/sync.rs` : inventaire et transfert de fichiers.
 - `src/install.rs` : installation (launchd, systemd, tâche planifiée Windows), PATH, consigne globale Claude Code.
-- `src/update.rs` : mise à jour depuis les versions GitHub.
+- `src/update.rs` : mise à jour depuis les versions GitHub, recopiées sur `Echoes-Maj` par son propre workflow (`mirror.yml`, toutes les heures) avec `Echoes` en secours ; la plus récente des deux l'emporte.
 - `src/history.rs` : journal des tâches. `src/dashboard.rs` + `src/dashboard.html` : tableau de bord local (127.0.0.1:47601, billet à usage unique après `#` échangé contre une session, preuve d'identité du serveur, contrôle de l'en-tête Host).
 - `packaging/macos/` : app `Echoes.app` (sans icône dans le Dock) dans une image disque `.dmg` à glisser dans Applications ; au premier lancement, l'app s'installe et ouvre le tableau de bord. `docs/index.html` : page de téléchargement (GitHub Pages, `.github/workflows/pages.yml`). Sous Windows, l'installateur est le programme lui-même : lancé sans argument, il s'installe puis ouvre le tableau de bord.
+- `brand/` : icône et marque. `tokens.json` (couleurs), `generer.py` (SVG), `rendre.js` (PNG et `packaging/macos/Echoes.icns`, via Playwright). Changer l'icône : `python3 brand/generer.py && node brand/rendre.js`, puis versionner les fichiers produits. Le design système de la page est dans `docs/assets/echoes.css` (vitrine : `docs/design-system.html`) ; `src/dashboard.html` en recopie les rôles de couleur.
 - `tests/e2e.rs` : deux « machines » sur la même, de bout en bout.

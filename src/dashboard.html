@@ -7,28 +7,32 @@
 <title>Echoes</title>
 <style>
 :root {
-  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1b; --muted: #6f6c66; --line: #e6e3dc;
-  --accent: #2f6f5e; --accent-soft: #e3efe9; --warn: #a2482f; --warn-soft: #f6e5df;
-  --bar: #d9d5cc; --local: #9a958b;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Rôles du design système Echoes (docs/assets/echoes.css), recopiés ici : la page est servie
+     sans fichier externe. Garder les deux en phase. */
+  --bg: #FAF8F5; --panel: #FFFFFF; --ink: #11151D; --muted: #5E6574; --line: #E7E2DA;
+  --accent: #B8522A; --accent-soft: #F8E6DC; --warn: #B93A2E; --warn-soft: #F8E2DF;
+  --ok: #2F8F5B; --bar: #E7E2DA; --local: #9AA1B0;
+  --fill: linear-gradient(90deg, #D9673A, #FFB574);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #151614; --panel: #1d1f1c; --ink: #ecebe6; --muted: #9d9a92; --line: #2d302b;
-    --accent: #7cc4ad; --accent-soft: #1f3530; --warn: #e6957c; --warn-soft: #3a2620;
-    --bar: #343731; --local: #77746c;
+    --bg: #0B0E14; --panel: #171C26; --ink: #EEF0F4; --muted: #9AA1B0; --line: #262D3B;
+    --accent: #EE8550; --accent-soft: #3A2419; --warn: #F07A6B; --warn-soft: #3A1E1B;
+    --ok: #5CC98B; --bar: #2E3646; --local: #6B7385;
   }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
-h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.015em; margin: 0; display: flex; align-items: center; gap: 8px; }
+h1 svg { width: 22px; height: 22px; flex: none; }
 h1 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
 h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 32px 0 8px; }
 .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
@@ -49,29 +53,29 @@ summary::-webkit-details-marker { display: none; }
 .tile .k { color: var(--muted); font-size: 12px; }
 .tile .v { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile .s { color: var(--muted); font-size: 12px; }
-.machines { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.machines { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .m { padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .m:last-child { border-bottom: 0; }
 .m .load { margin-top: 6px; }
 .tag.warn { color: var(--warn); border-color: var(--warn); }
 .m.off .name, .m.off .meta, .m.off .row { color: var(--muted); }
 .m .top { display: flex; align-items: center; gap: 8px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
-.off .dot { background: var(--local); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+.off .dot { background: var(--local); box-shadow: none; }
 .m .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag { margin-left: 4px; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
 .m .meta { color: var(--muted); font-size: 12px; }
 .load { height: 6px; background: var(--bar); border-radius: 3px; overflow: hidden; }
-.load i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.load i { display: block; height: 100%; background: var(--fill, var(--accent)); border-radius: 3px; }
 .m .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .share { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .share .line { display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; align-items: center; padding: 5px 0; }
 .share .line span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share .track { height: 10px; background: var(--bar); border-radius: 5px; overflow: hidden; }
-.share .track i { display: block; height: 100%; background: var(--accent); }
+.share .track i { display: block; height: 100%; background: var(--fill, var(--accent)); }
 .share .track i.loc { background: var(--local); }
 .legend { color: var(--muted); font-size: 12px; margin: 8px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--fill, var(--accent)); }
 .legend i.loc { background: var(--local); margin-left: 8px; }
 .share .line span:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .table { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
@@ -85,7 +89,7 @@ td .sub { display: block; color: var(--muted); font-size: 12px; font-family: inh
 .route { white-space: nowrap; }
 .route b { font-weight: 600; }
 .pill { display: inline-block; font-size: 12px; border-radius: 999px; padding: 1px 8px; }
-.pill.ok { background: var(--accent-soft); color: var(--accent); }
+.pill.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 .pill.ko { background: var(--warn-soft); color: var(--warn); }
 .gain { color: var(--accent); }
 .loss { color: var(--warn); }
@@ -122,7 +126,7 @@ button.act { font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 6
 <body>
 <main>
   <header>
-    <h1>Echoes <small id="sub">chargement…</small></h1>
+    <h1><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"> <defs> <linearGradient id="e-f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232A38"/><stop offset="1" stop-color="#0B0E14"/></linearGradient> <linearGradient id="e-o" x1="0.1" y1="0.9" x2="0.9" y2="0.1"><stop offset="0" stop-color="#D9673A"/><stop offset="1" stop-color="#FFB574"/></linearGradient> </defs> <path d="M60.5,32.0 L60.4,40.9 L60.3,44.4 L60.0,47.0 L59.7,49.1 L59.2,50.9 L58.6,52.5 L57.9,53.9 L57.1,55.1 L56.2,56.2 L55.1,57.1 L53.9,57.9 L52.5,58.6 L50.9,59.2 L49.1,59.7 L47.0,60.0 L44.4,60.3 L40.9,60.4 L32.0,60.5 L23.1,60.4 L19.6,60.3 L17.0,60.0 L14.9,59.7 L13.1,59.2 L11.5,58.6 L10.1,57.9 L8.9,57.1 L7.8,56.2 L6.9,55.1 L6.1,53.9 L5.4,52.5 L4.8,50.9 L4.3,49.1 L4.0,47.0 L3.7,44.4 L3.6,40.9 L3.5,32.0 L3.6,23.1 L3.7,19.6 L4.0,17.0 L4.3,14.9 L4.8,13.1 L5.4,11.5 L6.1,10.1 L6.9,8.9 L7.8,7.8 L8.9,6.9 L10.1,6.1 L11.5,5.4 L13.1,4.8 L14.9,4.3 L17.0,4.0 L19.6,3.7 L23.1,3.6 L32.0,3.5 L40.9,3.6 L44.4,3.7 L47.0,4.0 L49.1,4.3 L50.9,4.8 L52.5,5.4 L53.9,6.1 L55.1,6.9 L56.2,7.8 L57.1,8.9 L57.9,10.1 L58.6,11.5 L59.2,13.1 L59.7,14.9 L60.0,17.0 L60.3,19.6 L60.4,23.1 Z" fill="url(#e-f)"/> <path d="M44.8,30.0 A13,13 0 1 1 34.0,19.2" fill="none" stroke="url(#e-o)" stroke-width="5" stroke-linecap="round"/> <path d="M52.8,26.4 A21.5,21.5 0 1 1 37.6,11.2" fill="none" stroke="url(#e-o)" stroke-width="4" stroke-linecap="round" opacity="0.65"/> <circle cx="32" cy="32" r="6" fill="#FFB574"/> </svg>Echoes <small id="sub">chargement…</small></h1>
     <div class="seg" role="group" aria-label="Période">
       <button data-p="1">24 h</button><button data-p="7">7 jours</button><button data-p="30">30 jours</button><button data-p="0">Tout</button>
     </div>
