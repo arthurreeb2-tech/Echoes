@@ -328,8 +328,12 @@ fn ls_lists_the_worker() {
     let out = echoes_env(&lab.client_home, &lab.client_home, &[("ECHOES_HOSTS", &lab.host)], &["ls"]);
     assert!(out.status.success(), "stderr: {}", text(&out.stderr));
     let stdout = text(&out.stdout);
+    // Sur un réseau avec mDNS, la machine peut être trouvée sous son adresse de réseau local plutôt
+    // que 127.0.0.1 : seul le port est sûr.
+    let port = lab.host.rsplit_once(':').unwrap().1;
+    let suffix = format!(":{port}");
     assert!(stdout.contains("cette machine"), "{stdout}");
-    assert!(stdout.contains(&lab.host) && stdout.contains("puissance"), "{stdout}");
+    assert!(stdout.lines().any(|l| l.trim_end().ends_with(&suffix)) && stdout.contains("puissance"), "{stdout}");
     assert!(!stdout.contains("Aucune autre machine"), "{stdout}");
     assert_eq!(stdout.lines().count(), 2, "{stdout}");
 
@@ -338,7 +342,7 @@ fn ls_lists_the_worker() {
     echoes(&stranger, &stranger, &["pair"]);
     let out = echoes_env(&stranger, &stranger, &[("ECHOES_HOSTS", &lab.host)], &["ls"]);
     let stdout = text(&out.stdout);
-    assert!(!stdout.contains(&lab.host) && stdout.contains("Aucune autre machine"), "{stdout}");
+    assert!(!stdout.lines().any(|l| l.trim_end().ends_with(&suffix)) && stdout.contains("Aucune autre machine"), "{stdout}");
 }
 
 #[test]
