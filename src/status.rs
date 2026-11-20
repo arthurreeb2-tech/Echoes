@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use sysinfo::System;
 
+const GB: f64 = (1u64 << 30) as f64;
+
 /// Petit calcul chronométré, mis en cache : sert à comparer les machines.
 fn bench() -> f64 {
     let path = config::data_dir().ok().map(|d| d.join("bench"));
@@ -64,8 +66,6 @@ fn fixed() -> Result<Status> {
     })
 }
 
-const GB: f64 = (1u64 << 30) as f64;
-
 fn free_cores(sys: &System) -> f64 {
     sys.cpus().len() as f64 * (1.0 - sys.global_cpu_usage() as f64 / 100.0)
 }
@@ -101,7 +101,7 @@ fn parse_lines(text: &str) -> Option<f32> {
 
 /// Occupation de la carte graphique en %, ou `None` si elle n'est pas mesurable sur cette machine.
 pub fn gpu_percent() -> Option<f32> {
-    // Pour les tests : simule une carte graphique occupée.
+    // Simule une carte graphique occupée.
     if let Some(v) = std::env::var("ECHOES_FAKE_GPU").ok().and_then(|v| v.parse::<f32>().ok()) {
         return Some(v.clamp(0.0, 100.0));
     }
@@ -170,6 +170,7 @@ pub fn monitor() -> Result<Arc<Mutex<Status>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn gpu_parsers() {
@@ -191,5 +192,57 @@ mod tests {
         s.gpu = None;
         s.mem_free_gb = 0.6;
         assert!(s.busy() && s.score() < idle * 0.3, "mémoire presque pleine : forte pénalité");
+    }
+
+    #[test]
+    fn ioreg_picks_highest_card_and_survives_junk() {
+        let two_cards = "+-o AGXAcceleratorG14X\n  | \"PerformanceStatistics\" = {\"Device Utilization %\"=12,\"Renderer Utilization %\"=9}\n+-o AMDRadeon\n  | \"PerformanceStatistics\" = {\"Device Utilization %\"=100}";
+        assert_eq!(parse_ioreg(two_cards), Some(100.0));
+        assert_eq!(parse_ioreg(""), None);
+        assert_eq!(parse_ioreg("\"Device Utilization %\"="), None);
+        assert_eq!(parse_ioreg("\"Device Utilization %\"=}"), None);
+        assert_eq!(parse_ioreg("\"Device Utilization %\"=abc,\"Device Utilization %\"=7"), Some(7.0));
+        assert_eq!(parse_ioreg("\"Renderer Utilization %\"=80"), None);
+    }
+
+    #[test]
+    fn line_parser_handles_nvidia_and_amd_outputs() {
+        assert_eq!(parse_lines("0\n100\n"), Some(100.0), "deux cartes NVIDIA");
+        assert_eq!(parse_lines("37\n"), Some(37.0));
+        assert_eq!(parse_lines("  42 \r\n"), Some(42.0));
+        assert_eq!(parse_lines("12.5 %"), Some(12.5));
+        assert_eq!(parse_lines(""), None);
+        assert_eq!(parse_lines("\n \n"), None);
+        assert_eq!(parse_lines("N/A\nNVIDIA-SMI has failed"), None);
+        assert_eq!(parse_lines("[N/A]\n40\n"), Some(40.0));
+    }
+
+    #[test]
+    fn fake_gpu_overrides_measure_and_is_clamped() {
+        let _guard = config::test_support::env_lock();
+        std::env::set_var("ECHOES_FAKE_GPU", "75");
+        assert_eq!(gpu_percent(), Some(75.0));
+        std::env::set_var("ECHOES_FAKE_GPU", "250");
+        assert_eq!(gpu_percent(), Some(100.0));
+        std::env::set_var("ECHOES_FAKE_GPU", "-5");
+        assert_eq!(gpu_percent(), Some(0.0));
+        std::env::remove_var("ECHOES_FAKE_GPU");
+    }
+
+    #[test]
+    fn host_name_and_bench_use_cached_files() {
+        let (_guard, home) = config::test_support::home("status");
+        let dir = home.join("echoes");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("name"), "  Mac mini du salon \n").unwrap();
+        assert_eq!(host_name(), "Mac mini du salon");
+        fs::write(dir.join("name"), "x".repeat(60)).unwrap();
+        assert_eq!(host_name().chars().count(), 40);
+        fs::write(dir.join("name"), "   \n").unwrap();
+        assert!(!host_name().is_empty(), "nom vide : repli sur le nom réseau");
+        assert!(!host_name().ends_with(".local"));
+
+        fs::write(dir.join("bench"), "123.4\n").unwrap();
+        assert_eq!(bench(), 123.4);
     }
 }
