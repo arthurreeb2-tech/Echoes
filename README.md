@@ -89,9 +89,9 @@ echoes update                                     # mise à jour immédiate
 
 ## Mises à jour automatiques
 
-Le service vérifie toutes les 6 heures s'il existe une version plus récente sur les versions publiées de GitHub, la télécharge, vérifie son empreinte SHA-256, s'assure qu'elle démarre sur cette machine, puis se relance avec elle, uniquement quand aucune tâche ne tourne. La version précédente est gardée à côté du programme (`echoes.prev`). `ECHOES_NO_UPDATE=1` désactive ce mécanisme.
+Le service vérifie toutes les 6 heures s'il existe une version plus récente parmi les versions publiées sur GitHub (dépôt [Echoes-Maj](https://github.com/arthurreeb2-tech/Echoes-Maj), avec ce dépôt-ci en secours : la plus récente des deux l'emporte), la télécharge, vérifie son empreinte SHA-256, s'assure qu'elle démarre sur cette machine, puis se relance avec elle, uniquement quand aucune tâche ne tourne. La version précédente est gardée à côté du programme (`echoes.prev`). `ECHOES_NO_UPDATE=1` désactive ce mécanisme.
 
-Publier une version : augmenter `version` dans `Cargo.toml` sur `main`. Le workflow `release.yml` compile pour macOS (Apple Silicon et Intel), Linux et Windows et publie la version ; les machines la récupèrent d'elles-mêmes. Cela suppose que le dépôt soit **public**.
+Publier une version : augmenter `version` dans `Cargo.toml` sur `main`. Le workflow `release.yml` compile pour macOS (Apple Silicon et Intel), Linux et Windows et publie la version ici et sur Echoes-Maj ; les machines la récupèrent d'elles-mêmes. Cela suppose que les deux dépôts soient **publics**, et que le secret `ECHOES_MAJ_TOKEN` (jeton GitHub à accès « Contents : read and write » sur Echoes-Maj) soit défini dans ce dépôt ; sans lui, la version n'est publiée qu'ici.
 
 ## Ce qui est synchronisé
 
@@ -113,4 +113,4 @@ Publier une version : augmenter `version` dans `Cargo.toml` sur `main`. Le workf
 
 ## Sécurité
 
-Le code d'appairage est une clé secrète : toute machine qui la possède peut exécuter des commandes sur celles qui font tourner le service. Les échanges sont chiffrés (Noise, clé pré-partagée) ; les mises à jour sont vérifiées par empreinte SHA-256 et ne proviennent que des versions publiées de ce dépôt. N'installe le service que sur des machines qui t'appartiennent.
+Le code d'appairage est une clé secrète : toute machine qui la possède peut exécuter des commandes sur celles qui font tourner le service. Les échanges sont chiffrés (Noise, clé pré-partagée) ; les mises à jour sont vérifiées par empreinte SHA-256 et ne proviennent que des versions publiées de ce dépôt ou d'Echoes-Maj. N'installe le service que sur des machines qui t'appartiennent.
