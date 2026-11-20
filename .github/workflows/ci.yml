@@ -32,4 +32,7 @@ jobs:
           "$app/Contents/MacOS/Echoes" --version
           softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1 || true
           arch -x86_64 "$app/Contents/MacOS/Echoes" --version
-          hdiutil detach /tmp/echoes-dmg
+          # Rosetta peut garder le programme ouvert quelques secondes après l'essai Intel
+          # (« Resource busy ») : on réessaie, puis on force le démontage.
+          for i in 1 2 3 4 5; do hdiutil detach /tmp/echoes-dmg && exit 0; sleep 3; done
+          hdiutil detach -force /tmp/echoes-dmg

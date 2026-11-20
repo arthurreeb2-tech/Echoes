@@ -4,7 +4,10 @@ use anyhow::{anyhow, bail, Context, Result};
 use sha2::{Digest, Sha256};
 use std::process::Command;
 
-pub const REPO: &str = "arthurreeb2-tech/Echoes";
+/// Dépôt des versions publiées : les machines y cherchent leurs mises à jour.
+pub const REPO: &str = "arthurreeb2-tech/Echoes-Maj";
+/// Ancien emplacement, gardé en secours tant que `Echoes-Maj` n'a pas encore de version.
+pub const LEGACY_REPO: &str = "arthurreeb2-tech/Echoes";
 const TARGET: &str = env!("ECHOES_TARGET");
 
 static EXE: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
@@ -18,11 +21,18 @@ pub fn remember_exe() {
 
 pub struct Release {
     pub version: String,
+    /// Adresse où cette version a été trouvée : le programme est téléchargé au même endroit.
+    base: String,
 }
 
-/// Adresse des fichiers de la dernière version publiée (modifiable pour un fork ou un test).
-fn base() -> String {
-    std::env::var("ECHOES_UPDATE_URL").unwrap_or_else(|_| format!("https://github.com/{REPO}/releases/latest/download"))
+/// Adresses des fichiers de la dernière version publiée, dans l'ordre d'essai
+/// (`ECHOES_UPDATE_URL`, une ou plusieurs adresses séparées par des espaces, les remplace
+/// pour un fork ou un test).
+fn bases() -> Vec<String> {
+    match std::env::var("ECHOES_UPDATE_URL") {
+        Ok(urls) => urls.split_whitespace().map(str::to_string).collect(),
+        Err(_) => [REPO, LEGACY_REPO].iter().map(|r| format!("https://github.com/{r}/releases/latest/download")).collect(),
+    }
 }
 
 pub fn enabled() -> bool {
@@ -60,18 +70,39 @@ fn parse(v: &str) -> Option<(u64, u64, u64)> {
 }
 
 /// Renvoie la dernière version publiée si elle est plus récente que celle-ci.
+///
+/// Tous les dépôts sont consultés et la version la plus récente l'emporte : si la
+/// publication sur l'un échoue un jour, les machines suivent quand même l'autre.
 pub fn check() -> Result<Option<Release>> {
-    let body = fetch(&format!("{}/version.txt", base())).map_err(|e| anyhow!("{e} (le dépôt doit être public et avoir au moins une version publiée)"))?;
-    let tag = String::from_utf8_lossy(&body).trim().to_string();
-    let tag = tag.as_str();
-    let latest = parse(tag).ok_or_else(|| anyhow!("numéro de version illisible : {tag}"))?;
+    let mut best: Option<((u64, u64, u64), Release)> = None;
+    let mut last_err = None;
+    for base in bases() {
+        let tag = match fetch(&format!("{base}/version.txt")) {
+            Ok(b) => String::from_utf8_lossy(&b).trim().to_string(),
+            Err(e) => {
+                last_err = Some(e);
+                continue;
+            }
+        };
+        let Some(v) = parse(&tag) else {
+            last_err = Some(anyhow!("numéro de version illisible : {tag}"));
+            continue;
+        };
+        if best.as_ref().is_none_or(|(b, _)| v > *b) {
+            best = Some((v, Release { version: tag.trim_start_matches('v').to_string(), base }));
+        }
+    }
+    let Some((latest, release)) = best else {
+        let e = last_err.unwrap_or_else(|| anyhow!("aucune adresse de mise à jour"));
+        bail!("{e} (le dépôt {REPO} doit être public et avoir au moins une version publiée)");
+    };
     let current = parse(env!("CARGO_PKG_VERSION")).unwrap();
-    Ok((latest > current).then(|| Release { version: tag.trim_start_matches('v').to_string() }))
+    Ok((latest > current).then_some(release))
 }
 
 /// Télécharge, vérifie l'empreinte SHA-256, puis remplace le programme en place.
 pub fn install(release: &Release) -> Result<()> {
-    let url = format!("{}/{}", base(), asset());
+    let url = format!("{}/{}", release.base, asset());
     let binary = fetch(&url)?;
     let expected = String::from_utf8(fetch(&format!("{url}.sha256"))?)?;
     let expected = expected.split_whitespace().next().unwrap_or_default().to_lowercase();
