@@ -1,5 +1,6 @@
 # Publie une version dès que le numéro de version de Cargo.toml change sur main.
 # Les machines équipées d'Echoes la récupèrent d'elles-mêmes dans les heures qui suivent.
+# Echoes-Maj recopie ensuite la version de lui-même (son workflow mirror.yml, toutes les heures).
 name: Release
 on:
   push:
@@ -105,18 +106,3 @@ jobs:
           gh release create "v${{ needs.version.outputs.version }}" dist/*
           --repo "${{ github.repository }}" --target "${{ github.sha }}"
           --title "Echoes ${{ needs.version.outputs.version }}" --generate-notes
-      # Canal de mise à jour : les machines cherchent d'abord leurs versions sur Echoes-Maj.
-      # Le jeton par défaut ne peut écrire que dans ce dépôt-ci : il faut un secret
-      # ECHOES_MAJ_TOKEN (jeton à accès « Contents : read and write » sur Echoes-Maj).
-      - name: Publication sur Echoes-Maj
-        env:
-          GH_TOKEN: ${{ secrets.ECHOES_MAJ_TOKEN }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::Secret ECHOES_MAJ_TOKEN absent : version publiée seulement sur ${{ github.repository }} (les machines s'en servent en secours)."
-            exit 0
-          fi
-          gh release create "v${{ needs.version.outputs.version }}" dist/* \
-            --repo arthurreeb2-tech/Echoes-Maj \
-            --title "Echoes ${{ needs.version.outputs.version }}" \
-            --notes "Version publiée depuis ${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ needs.version.outputs.version }}"
