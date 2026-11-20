@@ -94,7 +94,7 @@ fn show(secret: &[u8; 32]) {
     let url = format!("http://127.0.0.1:{PORT}/#{}", new_ticket(secret));
     if !open_browser(&url) {
         // Machine sans navigateur (session distante) : l'adresse ne sert qu'une fois, pendant 60 s.
-        println!("Ouvre cette adresse dans la minute, sur cette machine : {url}");
+        println!("Ouvre cette adresse dans la minute, sur cette machine : {url}");
     }
 }
 
@@ -108,7 +108,7 @@ pub fn open(wait_for_service: bool) -> Result<()> {
                 show(&secret);
                 return Ok(());
             }
-            Port::Other => bail!("le port {PORT} est occupé par un autre programme : le tableau de bord ne peut pas s'ouvrir en sécurité"),
+            Port::Other => bail!("le port {PORT} est occupé par un autre programme : le tableau de bord ne peut pas s'ouvrir en sécurité"),
             Port::Free if attempt + 1 < tries => std::thread::sleep(Duration::from_millis(250)),
             Port::Free => {}
         }
@@ -116,7 +116,7 @@ pub fn open(wait_for_service: bool) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", PORT)).with_context(|| format!("port {PORT} indisponible"))?;
     let shared = Arc::new(Shared::new(secret, false));
     show(&secret);
-    println!("Le service Echoes ne tourne pas : cette page reste disponible tant qu'elle est utilisée (arrêt après 15 minutes sans activité).");
+    println!("Le service Echoes ne tourne pas : cette page reste disponible tant qu'elle est utilisée (arrêt après 15 minutes sans activité).");
     serve_forever(listener, shared);
     Ok(())
 }
@@ -128,7 +128,7 @@ pub fn spawn_server() {
         Ok(listener) => {
             std::thread::spawn(move || serve_forever(listener, Arc::new(Shared::new(secret, true))));
         }
-        Err(e) => eprintln!("echoes: tableau de bord indisponible (port {PORT} : {e})"),
+        Err(e) => eprintln!("echoes: tableau de bord indisponible (port {PORT} : {e})"),
     }
 }
 
@@ -141,11 +141,13 @@ struct Shared {
     last_request: Mutex<Instant>,
     /// Vrai quand la page est servie par le service d'arrière-plan.
     in_service: bool,
+    /// Port attendu dans l'en-tête Host.
+    port: u16,
 }
 
 impl Shared {
     fn new(secret: [u8; 32], in_service: bool) -> Self {
-        Shared { secret, sessions: Mutex::new(HashMap::new()), used: Mutex::new(HashSet::new()), last_request: Mutex::new(Instant::now()), in_service }
+        Shared { secret, sessions: Mutex::new(HashMap::new()), used: Mutex::new(HashSet::new()), last_request: Mutex::new(Instant::now()), in_service, port: PORT }
     }
 
     fn authorized(&self, req: &Request) -> bool {
@@ -219,15 +221,8 @@ fn read_request(stream: &mut TcpStream) -> Result<Request> {
             bail!("en-tête trop long");
         }
     };
-    let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
-    let mut lines = head.lines();
-    let mut first = lines.next().unwrap_or_default().split_whitespace();
-    let method = first.next().unwrap_or_default().to_string();
-    let target = first.next().unwrap_or_default().to_string();
-    let (path, query) = target.split_once('?').map(|(p, q)| (p.to_string(), q.to_string())).unwrap_or((target.clone(), String::new()));
-    let headers: HashMap<String, String> =
-        lines.filter_map(|l| l.split_once(':')).map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string())).collect();
-    let len: usize = headers.get("content-length").and_then(|v| v.parse().ok()).unwrap_or(0).min(8192);
+    let mut req = parse_head(&String::from_utf8_lossy(&buf[..head_end]));
+    let len: usize = req.headers.get("content-length").and_then(|v| v.parse().ok()).unwrap_or(0).min(8192);
     let mut body = buf[head_end + 4..].to_vec();
     while body.len() < len {
         let n = read(stream, &mut chunk)?;
@@ -237,7 +232,19 @@ fn read_request(stream: &mut TcpStream) -> Result<Request> {
         body.extend_from_slice(&chunk[..n]);
     }
     body.truncate(len);
-    Ok(Request { method, path, query, headers, body })
+    req.body = body;
+    Ok(req)
+}
+
+/// Ligne de requête et en-têtes (noms en minuscules) ; le corps est lu à part.
+fn parse_head(head: &str) -> Request {
+    let mut lines = head.lines();
+    let mut first = lines.next().unwrap_or_default().split_whitespace();
+    let method = first.next().unwrap_or_default().to_string();
+    let target = first.next().unwrap_or_default();
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    let headers = lines.filter_map(|l| l.split_once(':')).map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string())).collect();
+    Request { method, path: path.to_string(), query: query.to_string(), headers, body: Vec::new() }
 }
 
 fn respond(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) -> Result<()> {
@@ -254,13 +261,16 @@ fn json<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<()> {
     respond(stream, "200 OK", "application/json; charset=utf-8", &serde_json::to_vec(value)?)
 }
 
+fn host_allowed(host: &str, port: u16) -> bool {
+    host == format!("127.0.0.1:{port}") || host == format!("localhost:{port}")
+}
+
 fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<()> {
     let Ok(req) = read_request(stream) else { return Ok(()) };
     *shared.last_request.lock().unwrap() = Instant::now();
     // Contre le « DNS rebinding » : seule une page servie en local peut parler au tableau de bord.
-    let host = req.headers.get("host").map(String::as_str).unwrap_or_default();
-    if host != format!("127.0.0.1:{PORT}") && host != format!("localhost:{PORT}") {
-        return respond(stream, "403 Forbidden", "text/plain", b"interdit");
+    if !host_allowed(req.headers.get("host").map(String::as_str).unwrap_or_default(), shared.port) {
+        return respond(stream, "403 Forbidden", "text/plain", "accès refusé : nom d'hôte non autorisé".as_bytes());
     }
     match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/") => return respond(stream, "200 OK", "text/html; charset=utf-8", PAGE.as_bytes()),
@@ -277,7 +287,7 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<()> {
             }
             let Ok(body) = serde_json::from_slice::<Body>(&req.body) else { return respond(stream, "400 Bad Request", "text/plain", b"demande illisible") };
             if !ticket_valid(&shared.secret, &body.ticket) || !shared.used.lock().unwrap().insert(body.ticket) {
-                return respond(stream, "401 Unauthorized", "text/plain", b"billet invalide");
+                return respond(stream, "401 Unauthorized", "text/plain", "billet invalide ou déjà utilisé : relance `echoes dashboard`".as_bytes());
             }
             let token = hex::encode(rand::random::<[u8; 32]>());
             shared.sessions.lock().unwrap().insert(*blake3::hash(token.as_bytes()).as_bytes(), Instant::now() + SESSION);
@@ -289,7 +299,7 @@ fn handle(stream: &mut TcpStream, shared: &Shared) -> Result<()> {
         return respond(stream, "404 Not Found", "text/plain", b"introuvable");
     }
     if !shared.authorized(&req) {
-        return respond(stream, "401 Unauthorized", "text/plain", b"session absente");
+        return respond(stream, "401 Unauthorized", "text/plain", "session absente ou expirée : rouvre le tableau de bord avec `echoes dashboard`".as_bytes());
     }
     match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/api/state") => json(stream, &state()?),
@@ -387,4 +397,163 @@ fn state() -> Result<State> {
     }
     known.sort_by(|a, b| b.me.cmp(&a.me).then(b.online.cmp(&a.online)).then(b.score.total_cmp(&a.score)));
     Ok(State { version: env!("CARGO_PKG_VERSION").into(), paired: key.is_some(), machines: known, history: hist })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEY: [u8; 32] = [7; 32];
+
+    fn ticket_with(secret: &[u8; 32], expiry: u64) -> String {
+        let body = format!("{expiry}.0011223344556677");
+        format!("{body}.{}", mac(secret, &format!("ticket:{body}")))
+    }
+
+    #[test]
+    fn host_header_is_checked() {
+        assert!(host_allowed("127.0.0.1:47601", 47601));
+        assert!(host_allowed("localhost:47601", 47601));
+        assert!(!host_allowed("", 47601));
+        assert!(!host_allowed("127.0.0.1", 47601));
+        assert!(!host_allowed("127.0.0.1:47602", 47601));
+        assert!(!host_allowed("evil.example:47601", 47601));
+        assert!(!host_allowed("127.0.0.1:47601.evil.example", 47601));
+        assert!(!host_allowed("LOCALHOST:47601 ", 47601));
+    }
+
+    #[test]
+    fn fresh_ticket_is_valid_for_its_secret_only() {
+        let t = new_ticket(&KEY);
+        assert!(ticket_valid(&KEY, &t));
+        assert!(!ticket_valid(&[8; 32], &t));
+    }
+
+    #[test]
+    fn ticket_refuses_expired_tampered_and_malformed() {
+        assert!(ticket_valid(&KEY, &ticket_with(&KEY, now() + 30)));
+        assert!(!ticket_valid(&KEY, &ticket_with(&KEY, now().saturating_sub(5))));
+        // Expiration repoussée sans refaire la signature.
+        let t = ticket_with(&KEY, now().saturating_sub(5));
+        let forged = t.replacen(&t[..t.find('.').unwrap()], &(now() + 3600).to_string(), 1);
+        assert!(!ticket_valid(&KEY, &forged));
+        for bad in ["", "abc", "1.aa.bb", "x.y.z", ".."] {
+            assert!(!ticket_valid(&KEY, bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn mac_depends_on_secret_and_message() {
+        assert_eq!(mac(&KEY, "a"), mac(&KEY, "a"));
+        assert_ne!(mac(&KEY, "a"), mac(&KEY, "b"));
+        assert_ne!(mac(&KEY, "a"), mac(&[8; 32], "a"));
+    }
+
+    #[test]
+    fn parse_head_reads_request_line_headers_and_query() {
+        let req = parse_head("GET /api/hello?n=ab12 HTTP/1.1\r\nHost: localhost:47601\r\nX-Echoes-Token:  abc \r\nligne sans deux-points\r\nCookie: a=1; b=2");
+        assert_eq!((req.method.as_str(), req.path.as_str(), req.query.as_str()), ("GET", "/api/hello", "n=ab12"));
+        assert_eq!(req.headers.get("host").map(String::as_str), Some("localhost:47601"));
+        assert_eq!(req.headers.get("x-echoes-token").map(String::as_str), Some("abc"));
+        assert_eq!(req.headers.get("cookie").map(String::as_str), Some("a=1; b=2"));
+        assert_eq!(req.headers.len(), 3);
+        assert!(req.body.is_empty());
+    }
+
+    #[test]
+    fn parse_head_tolerates_garbage() {
+        let req = parse_head("");
+        assert_eq!((req.method.as_str(), req.path.as_str(), req.query.as_str()), ("", "", ""));
+        let req = parse_head("POST /api/session");
+        assert_eq!((req.method.as_str(), req.path.as_str()), ("POST", "/api/session"));
+        assert!(req.headers.is_empty());
+    }
+
+    #[test]
+    fn session_requires_known_token() {
+        let shared = Shared::new(KEY, true);
+        let with_token = |t: Option<&str>| {
+            let mut req = parse_head("GET /api/state HTTP/1.1");
+            if let Some(t) = t {
+                req.headers.insert("x-echoes-token".into(), t.into());
+            }
+            req
+        };
+        assert!(!shared.authorized(&with_token(None)));
+        assert!(!shared.authorized(&with_token(Some("inconnu"))));
+        shared.sessions.lock().unwrap().insert(*blake3::hash(b"bon").as_bytes(), Instant::now() + Duration::from_secs(60));
+        assert!(shared.authorized(&with_token(Some("bon"))));
+        // Une session expirée est refusée et purgée.
+        shared.sessions.lock().unwrap().insert(*blake3::hash(b"vieux").as_bytes(), Instant::now() - Duration::from_secs(1));
+        assert!(!shared.authorized(&with_token(Some("vieux"))));
+        assert_eq!(shared.sessions.lock().unwrap().len(), 1);
+    }
+
+    /// Envoie une requête brute au serveur et rend toute la réponse.
+    fn http(addr: std::net::SocketAddr, raw: &str) -> String {
+        let mut s = TcpStream::connect(addr).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        s.write_all(raw.as_bytes()).unwrap();
+        let mut out = String::new();
+        let _ = s.read_to_string(&mut out);
+        out
+    }
+
+    fn post(addr: std::net::SocketAddr, host: &str, path: &str, token: &str, body: &str) -> String {
+        http(addr, &format!("POST {path} HTTP/1.1\r\nHost: {host}\r\nX-Echoes-Token: {token}\r\nContent-Length: {}\r\n\r\n{body}", body.len()))
+    }
+
+    #[test]
+    fn server_end_to_end_on_free_port() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut shared = Shared::new(KEY, true);
+        shared.port = addr.port();
+        std::thread::spawn(move || serve_forever(listener, Arc::new(shared)));
+        let host = format!("127.0.0.1:{}", addr.port());
+        let get = |path: &str, extra: &str| http(addr, &format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n{extra}\r\n"));
+
+        // Page servie, avec ses en-têtes de protection.
+        let page = get("/", "");
+        assert!(page.starts_with("HTTP/1.1 200"), "{page}");
+        assert!(page.contains("X-Frame-Options: DENY") && page.contains("Cache-Control: no-store"));
+
+        // Mauvais hôte ou absent : refus, même pour la page.
+        assert!(http(addr, "GET / HTTP/1.1\r\nHost: evil.example\r\n\r\n").starts_with("HTTP/1.1 403"));
+        assert!(http(addr, "GET / HTTP/1.1\r\n\r\n").starts_with("HTTP/1.1 403"));
+
+        // Preuve d'identité : la réponse contient l'empreinte du nonce, calculable avec le seul secret.
+        let proof = get("/api/hello?n=00ff", "");
+        assert!(proof.contains(&mac(&KEY, "hello:00ff")), "{proof}");
+        assert!(!proof.contains(&mac(&[8; 32], "hello:00ff")));
+
+        // Chemins et méthodes inconnus.
+        assert!(get("/nimporte", "").starts_with("HTTP/1.1 404"));
+        assert!(get("/api/inconnu", "").starts_with("HTTP/1.1 401"));
+        assert!(post(addr, &host, "/", "", "").starts_with("HTTP/1.1 404"));
+
+        // Billet : refusé s'il est inconnu, illisible ou signé par un autre secret.
+        assert!(post(addr, &host, "/api/session", "", "{\"ticket\":\"1.aa.bb\"}").starts_with("HTTP/1.1 401"));
+        assert!(post(addr, &host, "/api/session", "", "pas du json").starts_with("HTTP/1.1 400"));
+        let foreign = format!("{{\"ticket\":\"{}\"}}", new_ticket(&[8; 32]));
+        assert!(post(addr, &host, "/api/session", "", &foreign).starts_with("HTTP/1.1 401"));
+        // Mauvais hôte : le billet n'est même pas examiné.
+        let ticket = format!("{{\"ticket\":\"{}\"}}", new_ticket(&KEY));
+        assert!(post(addr, "evil.example", "/api/session", "", &ticket).starts_with("HTTP/1.1 403"));
+
+        // Le même billet ouvre une session une fois, puis plus jamais.
+        let reply = post(addr, &host, "/api/session", "", &ticket);
+        assert!(reply.starts_with("HTTP/1.1 200"), "{reply}");
+        let json: serde_json::Value = serde_json::from_str(reply.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let token = json["token"].as_str().unwrap().to_string();
+        assert_eq!(token.len(), 64);
+        assert!(post(addr, &host, "/api/session", "", &ticket).starts_with("HTTP/1.1 401"));
+
+        // La session donne accès à l'API ; une route inconnue reste introuvable, un mauvais jeton est refusé.
+        let auth = format!("X-Echoes-Token: {token}\r\n");
+        assert!(get("/api/inconnu", &auth).starts_with("HTTP/1.1 404"));
+        assert!(get("/api/inconnu", "X-Echoes-Token: faux\r\n").starts_with("HTTP/1.1 401"));
+        assert!(post(addr, &host, "/api/pair", "faux", "{}").starts_with("HTTP/1.1 401"));
+        assert!(post(addr, &host, "/api/pair", &token, "pas du json").starts_with("HTTP/1.1 400"));
+    }
 }
